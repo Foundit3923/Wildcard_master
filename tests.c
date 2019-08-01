@@ -107,17 +107,18 @@ void preprocessing( char search_term[],  char query_string[]){
                 if (anchored_end) {
 
                     char_to_check = test_query & anchor_check[query_len - 1];
+                    char_mask = char_to_check;
                     //char_to_check >>= 8;
                     //char_to_check >>= 8;
                     //char_to_check >>= 8;
                     int shifter = (query_len - 1) * 8;
                     char_to_check >>= shifter;
-                    if( (query_len -1) > 0){
-
+                    //if( (query_len -1) > 0){
+                        char_mask = 0;
                         char_mask_1 = ((char_to_check << 8) | char_to_check);                                  // 00000000 00000000 00000000 00000000 00000000 00000000 00000000 11111111 -> 00000000 00000000 00000000 00000000 00000000 00000000 11111111 11111111
                         char_mask_2 = ((char_mask_1 << 16) | char_mask_1);                                     // 00000000 00000000 00000000 00000000 00000000 00000000 11111111 11111111 -> 00000000 00000000 00000000 00000000 11111111 11111111 11111111 11111111
                         char_mask = ((char_mask_2 << 32) | char_mask_2);                                       // 00000000 00000000 00000000 00000000 11111111 11111111 11111111 11111111 -> 11111111 11111111 11111111 11111111 11111111 11111111 11111111 11111111
-                    }
+                    //}
                     /*The tester is an 8 bit mask that reveals characters at particular locations.
                      * In this one, we are getting the location of the end of the term.
                      * In this way the tester represente
@@ -137,30 +138,31 @@ void preprocessing( char search_term[],  char query_string[]){
                     expected = char_mask & tester;
 
                     if (anchored_beginning) {
-                        char_to_check = test_query & anchor_check[0];
-
+                        /*char_to_check = test_query & anchor_check[0];
+                        char_mask = char_to_check;
                         if( (query_len -1) > 0){
 
                             char_mask_1 = ((char_to_check << 8) & char_to_check);                                  // 00000000 00000000 00000000 00000000 00000000 00000000 00000000 11111111 -> 00000000 00000000 00000000 00000000 00000000 00000000 11111111 11111111
                             char_mask_2 = ((char_mask_1 << 16) & char_mask_1);                                     // 00000000 00000000 00000000 00000000 00000000 00000000 11111111 11111111 -> 00000000 00000000 00000000 00000000 11111111 11111111 11111111 11111111
                             char_mask = ((char_mask_2 << 32) & char_mask_2);                                       // 00000000 00000000 00000000 00000000 11111111 11111111 11111111 11111111 -> 11111111 11111111 11111111 11111111 11111111 11111111 11111111 11111111
-                        }
-                        expected |= (char_to_check & anchor_check[ 0 ]);
+                        }*/
+                        expected |= (test_query & anchor_check[ 0 ]);
                         tester |= anchor_check[ 0 ];
 
                     }
                 } else if (anchored_beginning) {
 
-                    char_to_check = test_query & anchor_check[0];
+                    /*char_to_check = test_query & anchor_check[0];
+                    char_mask = char_to_check;
 
                     if( (query_len -1) > 0){
 
                         char_mask_1 = ((char_to_check << 8) | char_to_check);                                  // 00000000 00000000 00000000 00000000 00000000 00000000 00000000 11111111 -> 00000000 00000000 00000000 00000000 00000000 00000000 11111111 11111111
                         char_mask_2 = ((char_mask_1 << 16) | char_mask_1);                                     // 00000000 00000000 00000000 00000000 00000000 00000000 11111111 11111111 -> 00000000 00000000 00000000 00000000 11111111 11111111 11111111 11111111
                         char_mask = ((char_mask_2 << 32) | char_mask_2);                                       // 00000000 00000000 00000000 00000000 11111111 11111111 11111111 11111111 -> 11111111 11111111 11111111 11111111 11111111 11111111 11111111 11111111
-                    }
+                    }*/
 
-                    expected = char_mask & anchor_check[ 0 ];
+                    expected = test_query & anchor_check[ 0 ];
                     tester = anchor_check[ 0 ];
                 }
             }
@@ -258,7 +260,7 @@ void expect(char init_term[], char init_query[], bool expectation, char message[
                 start = clock();
 
                 int count;
-                for (count = 0; count < 1000000000; count++) {
+                for (count = 0; count < 1000000; count++) {
                     //  result = wildcard(init_term,
                     //                    init_query);
                     result = Experimental_wildcard(term,
@@ -281,7 +283,7 @@ void expect(char init_term[], char init_query[], bool expectation, char message[
         start = clock();
 
         int count;
-        for (count = 0; count < 1000000000; count++) {
+        for (count = 0; count < 1000000; count++) {
             result = kraussListingTwo(init_term, init_query);
         }
         end = clock();
