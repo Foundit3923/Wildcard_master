@@ -20,6 +20,8 @@ int tests_run = 0;
 int tests_passed = 0;
 int tests_failed = 0;
 int test = 0;
+int my_count = 0;
+int krauss_count = 0;
 
 char* subquery;
 char* query;
@@ -143,7 +145,7 @@ void preprocessing( char search_term[],  char query_string[]){
                             char_mask_2 = ((char_mask_1 << 16) & char_mask_1);                                     // 00000000 00000000 00000000 00000000 00000000 00000000 11111111 11111111 -> 00000000 00000000 00000000 00000000 11111111 11111111 11111111 11111111
                             char_mask = ((char_mask_2 << 32) & char_mask_2);                                       // 00000000 00000000 00000000 00000000 11111111 11111111 11111111 11111111 -> 11111111 11111111 11111111 11111111 11111111 11111111 11111111 11111111
                         }
-                        expected |= (char_mask & anchor_check[ 0 ]);
+                        expected |= (char_to_check & anchor_check[ 0 ]);
                         tester |= anchor_check[ 0 ];
 
                     }
@@ -187,6 +189,7 @@ void preprocessing( char search_term[],  char query_string[]){
                         query_string[ 0 ] = '*';
                     }
                     if (anchored_end) {
+                        //need to take care of term here too
                         query_string[ strlen(query_string) - 1 ] = '*';
                     }
                 }
@@ -238,12 +241,16 @@ void expect(char init_term[], char init_query[], bool expectation, char message[
     strncpy(t_init_term,init_term,strlen(init_term));
 
     preprocessing(t_init_term, t_init_query);
+
     bool check = criteria_are_met;
     bool result = false;
     double cpu_time_used = 0;
+    double* test_time = my_time;
     if(test == 0) {
         if (criteria_are_met) {
             if (subquery == NULL && init_query != "") {
+                my_time[my_count] = 0;
+                my_count++;
                 result = true;
             } else {
                 clock_t start;
@@ -251,7 +258,7 @@ void expect(char init_term[], char init_query[], bool expectation, char message[
                 start = clock();
 
                 int count;
-                for (count = 0; count < 1000000; count++) {
+                for (count = 0; count < 1000000000; count++) {
                     //  result = wildcard(init_term,
                     //                    init_query);
                     result = Experimental_wildcard(term,
@@ -259,8 +266,13 @@ void expect(char init_term[], char init_query[], bool expectation, char message[
                 }
                 end = clock();
                 cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
+
+                my_time[my_count] = cpu_time_used;
+                my_count++;
             }
         } else {
+            my_time[my_count] = 0;
+            my_count++;
             result = false;
         }
     }
@@ -269,12 +281,15 @@ void expect(char init_term[], char init_query[], bool expectation, char message[
         start = clock();
 
         int count;
-        for (count = 0; count < 1000000; count++) {
+        for (count = 0; count < 1000000000; count++) {
             result = kraussListingTwo(init_term, init_query);
         }
         end = clock();
         cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
+        krauss_time[krauss_count] = cpu_time_used;
+        krauss_count++;
     }
+
 
 /*        bool new_wildcard(uint64_t search_term,
                           char *t,
@@ -322,6 +337,10 @@ void expect(char init_term[], char init_query[], bool expectation, char message[
     if (result == expectation) success = "PASSED";
     else success = "FAILED";
 
+    if(success == "FAILED"){
+        my_time[my_count - 1] = 1000;
+    }
+
     char *actual_return;
     if (result == true) actual_return = "true";
     else actual_return = "false";
@@ -351,6 +370,8 @@ void expect(char init_term[], char init_query[], bool expectation, char message[
 
 int main() {
     for (test; test < 2; test++) {
+        double start, end, cpu_time_used;
+        start = clock();
 
         if (test == 1) {
             printf("\nKrauss Results\n");
@@ -391,6 +412,7 @@ int main() {
         expect("term", "*m", true, "right-anchored single trailing letter query");
         expect("term", "e", false, "dual-anchored single middle letter query");
         expect("term", "*e*", true, "non-anchored single middle letter query");
+
         printf("\n");
 
         printf("Testing complex queries\n");
@@ -543,7 +565,50 @@ int main() {
         printf("\n");
 
         printf("Ran %d tests with %d passes and %d failures\n", tests_run, tests_passed, tests_failed);
+
+        end = clock();
+        cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
+        printf("Total time used: %f \n", cpu_time_used);
+
+        if( test == 1) {
+            int i = 0;
+            int loss_count = 0;
+            int win_count = 0;
+            double my_total = 0;
+            double krauss_total = 0;
+            printf("   My Time      |   Krauss Time      |   Result\n");
+            for (i = 0; i < 38; i++) {
+                if (my_time[ i ] > krauss_time[ i ]) {
+                    printf("   %f      |   %f               |   Loss\n", my_time[ i ], krauss_time[ i ]);
+                    loss_count++;
+                    if( my_time[i] == 1000){
+                        my_total += 0;
+                    }
+                    else {
+                        my_total += my_time[ i ];
+                    }
+                    krauss_total += krauss_time[i];
+                } else {
+                    printf("   %f      |   %f               |   Win\n", my_time[ i ], krauss_time[ i ]);
+                    win_count++;
+                    if( my_time[i] == 1000){
+                        my_total += 0;
+                    }
+                    else {
+                        my_total += my_time[ i ];
+                    }
+                    krauss_total += krauss_time[i];
+                }
+            }
+            printf("total: %f      |   %f               |   Win\n", my_total, krauss_total);
+            printf("Win: %i.  Loss: %i \n", win_count, loss_count);
+        }
+
+
+
+
     }
+
     return 0;
 }
 

@@ -194,6 +194,7 @@ bool Experimental_wildcard (uint64_t search_term,
             // check if character exists in term
             for( int i = 1; i < 8; i++){
                 if( subquery_matches & TRAILING_BIT_ON){
+                    //why all bits on?
                         subquery_matches = ALL_BITS_ON;
                 }
                 else{
