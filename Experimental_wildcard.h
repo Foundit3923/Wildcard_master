@@ -101,7 +101,7 @@ bool Experimental_wildcard (uint64_t search_term,
 
 
     // Can i just use the while loop? Introduce a counter to make up for the for loop?
-    while( search_term > 0 && subquery_matches != 0){//character != NULL){
+    while( search_term > 0 && subquery_matches != 0 && character != NULL){
         if(bit_count == 0) {
 
             // points to the beginning of the array
@@ -145,6 +145,9 @@ bool Experimental_wildcard (uint64_t search_term,
         else{
             // update the chanacter being checked
             char_ptr++;
+            if(char_ptr == NULL){
+                char_ptr++;
+            }
             character = *char_ptr;
             if (DEBUG) printf("\t}\n");
 
@@ -152,6 +155,7 @@ bool Experimental_wildcard (uint64_t search_term,
             // already took care of checking anchored characters in preprocessing
             uint64_t checker;
             uint64_t mask = 1;
+            uint64_t temp_mask;
             int shift = 8;
             int counter = 0;
 
@@ -160,8 +164,9 @@ bool Experimental_wildcard (uint64_t search_term,
                 search_term >>= shift;
             }
             else {
-                for (counter = 2; counter < 8; counter++) {
-                    if (subquery_matches & (mask * counter)) {
+                for (counter = 1; counter < 8; counter++) {
+                    temp_mask = mask << (shift * counter);
+                    if (subquery_matches & (mask << (shift * counter))) {
                         search_term >>= (shift * counter);
                         counter = 8;
                     }

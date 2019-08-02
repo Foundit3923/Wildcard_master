@@ -22,6 +22,7 @@ int tests_failed = 0;
 int test = 0;
 int my_count = 0;
 int krauss_count = 0;
+int wild_count = 0;
 
 char* subquery;
 char* query;
@@ -56,9 +57,11 @@ void preprocessing( char search_term[],  char query_string[]){
     //Check if there is a query
     if (strlen(temp_query) > 0 && strlen(search_term) <= 8) {
         //Make sure that the term is long enough to satisfy the query
+        wild_count = strlen(temp_query);
         remove_all_chars(temp_query, '*');
         size_t query_len = strlen(temp_query);
         size_t term_len = strlen(search_term);
+        wild_count = wild_count - query_len;
         bool same = query_len >= term_len;
         if (query_len > term_len) {
             criteria_are_met = false;
@@ -74,6 +77,8 @@ void preprocessing( char search_term[],  char query_string[]){
                 anchored_beginning = true;
                 if (query_string[ strlen(query_string) - 1 ] != '*') {
                     anchored_end = true;
+
+                    //3, *m*k* -> m*k* -> m*k, still need 2 sections so only decrease if both anchors
                 }
 
             }
@@ -213,7 +218,27 @@ void preprocessing( char search_term[],  char query_string[]){
                 // for multiple delimiters in a row and beginning/end delimiters
 
                 // get the location of the first subquery
-                subquery = strtok(query, DELIMITER);
+                if(wild_count == 0){
+                    wild_count++;
+                }
+                if(anchored_beginning && anchored_end){
+                    wild_count--;
+                }
+                else{
+                    wild_count--;
+                }
+                //remove outer *?
+                char temp_subquery[wild_count];
+                temp_subquery[0]= strtok(query, DELIMITER);
+                int sub_count = 0;
+                if(temp_subquery[sub_count] && wild_count > 1) {
+                    while (sub_count < wild_count) {
+                        sub_count++;
+                        temp_subquery[ sub_count ] = strtok(NULL, DELIMITER);
+                    }
+                }
+                subquery = temp_subquery;
+
 
                 // Used for testing of anchored queries
                 first_subquery = (subquery != NULL);
@@ -262,7 +287,7 @@ void expect(char init_term[], char init_query[], bool expectation, char message[
                 int count;
                 for (count = 0; count < 1000000; count++) {
                     //  result = wildcard(init_term,
-                    //                    init_query);
+                    //                    init_query)
                     result = Experimental_wildcard(term,
                                                    subquery);
                 }
