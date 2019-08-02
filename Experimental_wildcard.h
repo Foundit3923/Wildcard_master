@@ -92,118 +92,83 @@ bool Experimental_wildcard (uint64_t search_term,
     char character = 's';
     char* char_ptr;
     uint64_t subquery_matches = ALL_BITS_ON;
+    uint64_t term = 0;
     bool do_all_subqueries_match = true;
     int bit_count = 0;
     int subquery_char_count = 0;
+    char_ptr = subquery_array;
+    character = *char_ptr;
+
 
     // Can i just use the while loop? Introduce a counter to make up for the for loop?
-    while( search_term > 0 && do_all_subqueries_match && character != NULL){
+    while( search_term > 0 && subquery_matches != 0){//character != NULL){
         if(bit_count == 0) {
-            char_ptr = subquery_array;
+
             // points to the beginning of the array
-            character = *char_ptr;
-            //character &= 255;
-        }
-        if (DEBUG) {
-            printf("\t\tTerm: %" PRIu64 "\n", search_term);
-            printf("\t\tQuery: %s\n", subquery_array);
+            uint64_t char_to_check = character;
+            uint64_t char_mask_1;
+            uint64_t char_mask_2;
+            uint64_t char_mask;
 
-        }
+            // make character mask to test term against
+            char_mask_1 = ((char_to_check << 8) | char_to_check);                                  // 00000000 00000000 00000000 00000000 00000000 00000000 00000000 11111111 -> 00000000 00000000 00000000 00000000 00000000 00000000 11111111 11111111
+            char_mask_2 = ((char_mask_1 << 16) | char_mask_1);                                     // 00000000 00000000 00000000 00000000 00000000 00000000 11111111 11111111 -> 00000000 00000000 00000000 00000000 11111111 11111111 11111111 11111111
+            char_mask = ((char_mask_2 << 32) | char_mask_2);                                       // 00000000 00000000 00000000 00000000 11111111 11111111 11111111 11111111 -> 11111111 11111111 11111111 11111111 11111111 11111111 11111111 11111111
 
-        if(character & BYTE_TRAILING_BIT_ON){
-            uint64_t temp = search_term;
-            if (DEBUG) {
-                printf("\t\tTerm bits:                ");
-                print_bits(temp);
-                printf("\n");
-                printf("\t\tCharacter:                ");
-                print_bits( character);
-                printf("\n");
-                printf("\t\tTrailing Bit:             ");
-                print_bits(BYTE_TRAILING_BIT_ON);
-                printf("\n");
-                printf("\t\tCharacter & Trailing bit: ");
-                print_bits(character & BYTE_TRAILING_BIT_ON);
-                printf("\n");
-                printf("\t\tMask bits:                ");
-                print_bits(LAST_BITS_ON);
-                printf("\n");
-                printf("\t\t(term & LAST_BITS_ON):    ");
-                print_bits(search_term & LAST_BITS_ON);
-                printf("\n");
-                printf("\t\tSubquery_matches:         ");
-                print_bits(subquery_matches);
-                printf("\n");
-            }
-            subquery_matches &= (search_term & LAST_BITS_ON);
-            if(subquery_matches == 0){
-                do_all_subqueries_match = false;
-            }
-        }
-        else{
-            if (DEBUG) {
-                printf("\t\tTerm bits:                ");
-                print_bits(search_term);
-                printf("\n");
-                printf("\t\tCharacter:                ");
-                print_bits(character);
-                printf("\n");
-                printf("\t\tTrailing Bit:             ");
-                print_bits(BYTE_TRAILING_BIT_ON);
-                printf("\n");
-                printf("\t\tCharacter & Trailing bit: ");
-                print_bits(character & BYTE_TRAILING_BIT_ON);
-                printf("\n");
-                printf("\t\tMask bits:                ");
-                print_bits(LAST_BITS_OFF);
-                printf("\n");
-                printf("\t\t~(term | LAST_BITS_OFF):  ");
-                print_bits(~(search_term | LAST_BITS_OFF));
-                printf("\n");
-                printf("\t\tSubquery_matches:         ");
-                print_bits(subquery_matches);
-                printf("\n");
-            }
-            subquery_matches &= ~(search_term | LAST_BITS_OFF);
-            if(subquery_matches == 0 ){
-                do_all_subqueries_match = false;
-            }
+            //add functionality for larger system word sizes
+
+
+            // Any match will be 11111111
+            uint64_t term_check = (char_mask ^ search_term);
+            term = ~(char_mask ^ search_term);
+            // We check each byte of term one bit at a time
+            // begins as 00000001 x 8
+            subquery_matches = LAST_BITS_ON;
         }
 
-        if (DEBUG) {
-            printf("\t\tNew subquery_matches:     ");
-            print_bits(subquery_matches);
-            printf("\n");
+        // subquery_matches updates the single active bit for each bit in the byte.
+        // the updated subquery_matches acts as the filter each time.
+        // only those bytes that == 11111111 will remain on the entire time.
+        subquery_matches &= term;
+
+        // if subquery_matches reaches 0 the loop is exited and false is returned.
+        if(subquery_matches == 0){
+            do_all_subqueries_match = false;
         }
+        term >>= 1;
 
-        search_term >>= 1;
-        character >>= 1;
-        if (DEBUG) printf("\t\t\n");
-
-        if(bit_count < 8) {
+        // increase bit_count for each loop.
+        if(bit_count <= 6) {
             bit_count++;
         }
+        // all bits have been checked for the character.
         else{
+            // update the chanacter being checked
             char_ptr++;
             character = *char_ptr;
             if (DEBUG) printf("\t}\n");
 
             // now check subquery matches
             // already took care of checking anchored characters in preprocessing
+            uint64_t checker;
+            uint64_t mask = 1;
+            int shift = 8;
+            int counter = 0;
 
-            // check if character exists in term
-            for( int i = 1; i < 8; i++){
-                if( subquery_matches & TRAILING_BIT_ON){
-                    //why all bits on?
-                        subquery_matches = ALL_BITS_ON;
-                }
-                else{
-                    subquery_matches >>= 8;
-                    search_term >>= 8;
+            // should this be used to make sure chars are appearing next to each other? i.e. & with 1.
+            if(subquery_matches & mask){
+                search_term >>= shift;
+            }
+            else {
+                for (counter = 2; counter < 8; counter++) {
+                    if (subquery_matches & (mask * counter)) {
+                        search_term >>= (shift * counter);
+                        counter = 8;
+                    }
                 }
             }
+            // reset bit_count for next char
             bit_count = 0;
-
         }
 
     }
