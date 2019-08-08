@@ -291,7 +291,7 @@ bool wildcard (char search_term[], char query_string[])
     //subquery = NULL;
     //free(first_subquery);
     //first_subquery = NULL;
-    //free(last_subquery);
+    //free(last_subquery);f
     //last_subquery = NULL;
     //free(character);
     //character = NULL;

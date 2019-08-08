@@ -38,17 +38,17 @@
 #define DEBUG false
 
 // https://stackoverflow.com/a/700184
-void print_bits_u(uint64_t num) {
+void print_bits(uint64_t num) {
     int i = (int) malloc(sizeof(int)); // for C89 compatability
     for (i=sizeof(num)*8-1; i>=0; i--)
     {
         putchar(((num >> i) & 1) ? '1': '0');
     }
-    free(i);
+    //   free(i);
     i = NULL;
 
 }
-
+/*
 void print_bits(uint64_t num) {
     int i;
     char p[64];
@@ -74,11 +74,11 @@ void print_bits(uint64_t num) {
     printf("%s", s);
 }
 
-
+*/
 // Explore idea of array of term subsections, where any term less than 8 chars is stored in a single subsection
 // Anchored chars are checked in preprocessing.
 bool Experimental_wildcard (uint64_t search_term,
-                            char* subquery_array) {
+                            char** subquery_array) {
     //-------------//
     //Preprocessing//
     //-------------//
@@ -96,7 +96,7 @@ bool Experimental_wildcard (uint64_t search_term,
     bool do_all_subqueries_match = true;
     int bit_count = 0;
     int subquery_char_count = 0;
-    char_ptr = subquery_array;
+    char_ptr = *subquery_array;
     character = *char_ptr;
 
 
@@ -105,7 +105,8 @@ bool Experimental_wildcard (uint64_t search_term,
         if(bit_count == 0) {
 
             // points to the beginning of the array
-            uint64_t char_to_check = character;
+            uint64_t char_to_check = 0;
+            char_to_check |= (uint64_t ) character;
             uint64_t char_mask_1;
             uint64_t char_mask_2;
             uint64_t char_mask;
@@ -121,15 +122,54 @@ bool Experimental_wildcard (uint64_t search_term,
             // Any match will be 11111111
             uint64_t term_check = (char_mask ^ search_term);
             term = ~(char_mask ^ search_term);
+            if (DEBUG) {
+                printf("\t\tTerm bits:                 ");
+                print_bits(search_term);
+                printf("\n");
+                printf("\t\tCharacter %c:               ", character);
+                print_bits(char_mask);
+                printf("\n");
+                printf("\n");
+                printf("\t\tCharacter mask:            ");
+                print_bits(char_mask);
+                printf("\n");
+                printf("\t\tSearch Term:               ");
+                print_bits(search_term);
+                printf("\n");
+                printf("\t\t~(char_mask ^ search_term):");
+                print_bits(term);
+                printf("\n");
+                printf("\n");
+
+            }
             // We check each byte of term one bit at a time
             // begins as 00000001 x 8
             subquery_matches = LAST_BITS_ON;
+            if(DEBUG){
+                printf("\t\tSubquery Matches:          ");
+                print_bits(subquery_matches);
+                printf("\n");
+            }
         }
 
         // subquery_matches updates the single active bit for each bit in the byte.
         // the updated subquery_matches acts as the filter each time.
         // only those bytes that == 11111111 will remain on the entire time.
+        if(DEBUG) {
+            printf("\t\tTerm Result:               ");
+            print_bits(term);
+            printf("\n");
+            printf("\t\tSubquery Matches:          ");
+            print_bits(subquery_matches);
+            printf("\n");
+
+        }
         subquery_matches &= term;
+        if(DEBUG){
+            printf("\t\tResult Subquery Matches:   ");
+            print_bits(subquery_matches);
+            printf("\n");
+        }
 
         // if subquery_matches reaches 0 the loop is exited and false is returned.
         if(subquery_matches == 0){
@@ -143,7 +183,7 @@ bool Experimental_wildcard (uint64_t search_term,
         }
         // all bits have been checked for the character.
         else{
-            // update the chanacter being checked
+            // update the character being checked
             char_ptr++;
             if(char_ptr == NULL){
                 char_ptr++;

@@ -24,7 +24,7 @@ int my_count = 0;
 int krauss_count = 0;
 int wild_count = 0;
 
-char* subquery;
+char** subquery;
 char* query;
 double my_time[76];
 double krauss_time[76];
@@ -51,6 +51,7 @@ void preprocessing( char search_term[],  char query_string[]){
 
     bool check = criteria_are_met;
     char *temp_query = (char *) malloc(sizeof(char));
+    subquery = (char**) malloc(sizeof(char*));
     uint64_t expected = 0;
     uint64_t tester = 0;
     strcpy(temp_query, query_string);
@@ -67,7 +68,7 @@ void preprocessing( char search_term[],  char query_string[]){
             criteria_are_met = false;
         }
 
-        if (search_term == "" && query_string != "*") {
+        if (*search_term == 0 && *query_string != 42) {
             criteria_are_met = false;
         } else {
             //Check for anchored chars
@@ -205,7 +206,7 @@ void preprocessing( char search_term[],  char query_string[]){
 
                 // Make copy of query_string so strtok can mutate it without a seg fault
                 query = (char *) malloc(sizeof(char));
-                strcpy(query, query_string);
+                //strcpy(query, query_string);
 
 
                 // A lack of delimiter in first or last position of the query signifies the
@@ -218,26 +219,31 @@ void preprocessing( char search_term[],  char query_string[]){
                 // for multiple delimiters in a row and beginning/end delimiters
 
                 // get the location of the first subquery
-                if(wild_count == 0){
-                    wild_count++;
-                }
+
                 if(anchored_beginning && anchored_end){
                     wild_count--;
                 }
                 else{
                     wild_count--;
                 }
+                if(wild_count <= 0){
+                    wild_count = 1;
+                }
                 //remove outer *?
-                char temp_subquery[wild_count];
-                temp_subquery[0]= strtok(query, DELIMITER);
+                //char temp_subquery[wild_count];
+
+                *subquery = strtok(query_string, DELIMITER);
+                //temp_subquery[0] = subquery;
                 int sub_count = 0;
-                if(temp_subquery[sub_count] && wild_count > 1) {
+                if(subquery[sub_count] && wild_count > 1) {
                     while (sub_count < wild_count) {
                         sub_count++;
-                        temp_subquery[ sub_count ] = strtok(NULL, DELIMITER);
+                        subquery[sub_count] = strtok(NULL, DELIMITER);
+                        //temp_subquery[ sub_count ] = subquery;
                     }
                 }
-                subquery = temp_subquery;
+
+
 
 
                 // Used for testing of anchored queries
@@ -248,7 +254,7 @@ void preprocessing( char search_term[],  char query_string[]){
                 //    criteria_are_met = false;
                 //}
             } else {
-                subquery = NULL;
+                *subquery = NULL;
             }
         }
     } else {
@@ -275,7 +281,7 @@ void expect(char init_term[], char init_query[], bool expectation, char message[
     double* test_time = my_time;
     if(test == 0) {
         if (criteria_are_met) {
-            if (subquery == NULL && init_query != "") {
+            if ((*subquery == NULL || subquery == NULL) && init_query != "") {
                 my_time[my_count] = 0;
                 my_count++;
                 result = true;
@@ -285,7 +291,7 @@ void expect(char init_term[], char init_query[], bool expectation, char message[
                 start = clock();
 
                 int count;
-                for (count = 0; count < 1000000; count++) {
+                for (count = 0; count < 1; count++) {
                     //  result = wildcard(init_term,
                     //                    init_query)
                     result = Experimental_wildcard(term,
@@ -308,7 +314,7 @@ void expect(char init_term[], char init_query[], bool expectation, char message[
         start = clock();
 
         int count;
-        for (count = 0; count < 1000000; count++) {
+        for (count = 0; count < 1; count++) {
             result = kraussListingTwo(init_term, init_query);
         }
         end = clock();
