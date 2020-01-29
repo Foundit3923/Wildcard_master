@@ -1,5 +1,6 @@
 //
 // Created by Michael Olson on 11/26/2019.
+// Moves through a string looking for a wildcard pattern
 //
 
 #include <stdio.h>
