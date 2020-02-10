@@ -36,6 +36,8 @@ int wild_count = 0;
 int test_count = 0;
 uint64_t full_mask[123];
 
+uint64_t anchor_check[8] = {255,65280,16711680,4278190080,1095216660480,280375465082880,71776119061217280,18374686479671624000};
+
 char** subquery;
 char* query;
 
