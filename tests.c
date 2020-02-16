@@ -932,7 +932,7 @@ void expect(char* init_term, char* init_query, bool expectation, char* message)
                     //  result = wildcard(init_term,
                     //                    init_query)
                     //result = Experimental_wildcard_a(term,subquery, full_mask);
-                    result = KMP_Experimental_wildcard_arbitrary_length(init_term, subquery, full_mask);
+                    result = Experimental_wildcard_arbitrary_length(init_term, subquery, full_mask);
                    // printf("%n \n", count);
                     //  loop_time = loop_time + loop_clock;
                     //main_time = main_time + main_loop_clock;
