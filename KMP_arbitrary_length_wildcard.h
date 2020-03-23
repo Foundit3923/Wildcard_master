@@ -35,7 +35,7 @@
 // More like config constants
 #define MAX_TERMS (sizeof(uint64_t)) // Should be 8
 #define DELIMITER "*" // The wild card itself
-#define DEBUG true
+#define DEBUG false
 
 //-----//
 //Debug//
@@ -76,7 +76,7 @@ void print_bits_t(uint64_t num) {
     s = &p[0];
     printf("%s", s);
 }
-bool KMP_Experimental_wildcard_arbitrary_length (char st[],
+bool KMP_Experimental_wildcard_arbitrary_length_test (char st[],
                                                  char** subquery_array,
                                                  uint64_t f_m[]) {
     //-------------//
@@ -97,7 +97,6 @@ bool KMP_Experimental_wildcard_arbitrary_length (char st[],
     int text_len = strlen(st);
     float sections = text_len / 8.00;
     sections = ceilf(sections);
-    int section_shifts = 1;
     int size = 0;
     int ls_location = 0;
 
@@ -121,6 +120,7 @@ bool KMP_Experimental_wildcard_arbitrary_length (char st[],
     bool bypass = false;
     bool null_force = false;
     bool single_sq = true;
+    bool no_match = false;
     int subquery_count = 0;
 
     // Points to beginning of array
@@ -163,7 +163,11 @@ bool KMP_Experimental_wildcard_arbitrary_length (char st[],
             //------------------//
             //Search for matches//
             //------------------//
-
+            int match_count;
+            for( match_count = 0; match_count < 8; match_count++){
+                subquery_matches &= encoded_window;
+                encoded_window >>= 1;
+            }/*
             subquery_matches &= encoded_window;
             encoded_window >>= 1;
             subquery_matches &= encoded_window;
@@ -178,7 +182,7 @@ bool KMP_Experimental_wildcard_arbitrary_length (char st[],
             encoded_window >>= 1;
             subquery_matches &= encoded_window;
             encoded_window >>= 1;
-            subquery_matches &= encoded_window;
+            subquery_matches &= encoded_window;*/
             if(DEBUG){
                 printf("  Search Results---------------------------------------------------------------------------------\n");
                 printf("  EW:                     ");
@@ -220,6 +224,7 @@ bool KMP_Experimental_wildcard_arbitrary_length (char st[],
                 // when we move to the next section of the text we know that whatever we find is after the last subquery
                 last_sqm = 0;
                 save_text_modifier = text_modifier;
+                last_mask = LAST_BITS_ON;
 
                 //------------------//
                 //Restart the search//
@@ -237,7 +242,7 @@ bool KMP_Experimental_wildcard_arbitrary_length (char st[],
             //There is a match, have we changed subqueries?
             //Does this matter? does changing subqueries need it's own section?
             if (changed_subqueries) {
-                if(DEBUG){
+                if (DEBUG) {
                     printf("IF: First Char of Subquery Matched\n");
                     printf("  IF: Changed Subqueries\n");
                 }
@@ -253,7 +258,7 @@ bool KMP_Experimental_wildcard_arbitrary_length (char st[],
                 //Can use this to find the position of the first instance, we locate and remove from subquery_matches
                 //But do we need to do this?
                 //if (last_sqm == 0) {
-                if(DEBUG) {
+                if (DEBUG) {
                     printf("    Setup for finding location of Character to check in SM-----------------------------------------\n");
                     printf("    last_sqm(ls):           ");
                     print_bits(last_sqm);
@@ -262,7 +267,7 @@ bool KMP_Experimental_wildcard_arbitrary_length (char st[],
                 last_sqm = subquery_matches;
                 //}
                 last_sqm &= last_mask;
-                if(DEBUG) {
+                if (DEBUG) {
                     printf("    ls <- SM:               ");
                     print_bits(subquery_matches);
                     printf("\n");
@@ -283,51 +288,56 @@ bool KMP_Experimental_wildcard_arbitrary_length (char st[],
                     if (last_sqm & 257) {
                         if (last_sqm & 1) {
                             //The masks are messing up, might need to rethink this process 2/18/20 10:36
-                                //Last mask system?
+                            //Last mask system?
                             location = 0;
-                            last_mask &= location_mask[location];
-                            subquery_matches &= location_mask[location];
-
+                            last_mask &= location_mask[ location ];
+                            subquery_matches &= location_mask[ location ];
                         } else {
                             location = 1;
-                            last_mask &= location_mask[location];
-                            subquery_matches &= location_mask[location];
+                            last_mask &= location_mask[ location ];
+                            subquery_matches &= location_mask[ location ];
                         }
                     } else {
                         if (last_sqm & 65536) {
                             location = 2;
-                            last_mask &= location_mask[location];
-                            subquery_matches &= location_mask[location];
+                            last_mask &= location_mask[ location ];
+                            subquery_matches &= location_mask[ location ];
                         } else {
                             location = 3;
-                            last_mask &= location_mask[location];
-                            subquery_matches &= location_mask[location];
+                            last_mask &= location_mask[ location ];
+                            subquery_matches &= location_mask[ location ];
                         }
                     }
                 } else {
                     if (last_sqm & 1103806595072) {
                         if (last_sqm & 4294967296) {
                             location = 4;
-                            last_mask &= location_mask[location];
-                            subquery_matches &= location_mask[location];
+                            last_mask &= location_mask[ location ];
+                            subquery_matches &= location_mask[ location ];
                         } else {
                             location = 5;
-                            last_mask &= location_mask[location];
-                            subquery_matches &= location_mask[location];
+                            last_mask &= location_mask[ location ];
+                            subquery_matches &= location_mask[ location ];
                         }
                     } else {
                         if (last_sqm & 281474976710656) {
                             location = 6;
-                            last_mask &= location_mask[location];
-                            subquery_matches &= location_mask[location];
+                            last_mask &= location_mask[ location ];
+                            subquery_matches &= location_mask[ location ];
+                        } else if (last_sqm & 72057594037927936) {
+                            location = 7;
+                            last_mask &= location_mask[ location ];
+                            subquery_matches &= location_mask[ location ];
                         } else {
                             location = 7;
-                            last_mask &= location_mask[location];
-                            subquery_matches &= location_mask[location];
+                            last_mask = LAST_BITS_ON;
+                            subquery_matches = 0;
+                            no_match = true;
+                            changed_subqueries = true;
                         }
                     }
                 }
-                if(DEBUG) {
+                if (DEBUG) {
                     printf("    Results of location identification-------------------------------------------------------------\n");
                     printf("    location(l):            %i", location);
                     printf("\n");
@@ -346,12 +356,12 @@ bool KMP_Experimental_wildcard_arbitrary_length (char st[],
                 }
                 ls_location = location;
                 // This check makes sure that we aren't dealing with a single char subquery, needs to be if charptr+1 != 0;
-                if(subquery_array[subquery_count][1] != 0) {
+                if (subquery_array[ subquery_count ][ 1 ] != 0 && location != -1) {
 
                     //----------------------//
                     //Check rest of Subquery//
                     //----------------------//
-                    if(DEBUG){
+                    if (DEBUG) {
                         printf("  IF: More than one char in subquery\n");
                     }
                     //This is the heart of the code. Check if rest of subquery exists at the position. Record offset.
@@ -365,7 +375,7 @@ bool KMP_Experimental_wildcard_arbitrary_length (char st[],
                     location += 1;
                     location += text_modifier;
                     int last_location;
-                    if(DEBUG){
+                    if (DEBUG) {
                         printf("  WHILE: null_check != 0\n");
                         printf("    Check if rest of characters match\n");
                     }
@@ -375,7 +385,20 @@ bool KMP_Experimental_wildcard_arbitrary_length (char st[],
                         char query = subquery_array[ subquery_count ][ i ];
                         char text = st[ (i - 1) + location ];
                         last_location = (i - 1) + location;
+                        if (DEBUG) {
+                            printf("      Query char to check:  %c", query);
+                            printf("\n");
+                            printf("      Text char to check:   %c", text);
+                            printf("\n");
+                            printf("      Last location in text:%i", last_location);
+                            printf("\n");
+                        }
                         if (query != text) {
+                            if (DEBUG) {
+                                printf("      Query != Text\n");
+                                printf("      Find next instance of first char\n");
+                                printf("\n");
+                            }
                             //No :(
                             // move to next available character
                             last_sqm = subquery_matches;
@@ -383,93 +406,140 @@ bool KMP_Experimental_wildcard_arbitrary_length (char st[],
                                 if (subquery_matches & 257) {
                                     if (subquery_matches & 1) {
                                         location = 0;
-                                        subquery_matches &= location_mask[location];
+                                        subquery_matches &= location_mask[ location ];
                                     } else {
                                         location = 1;
-                                        subquery_matches &= location_mask[location];
+                                        subquery_matches &= location_mask[ location ];
                                     }
                                 } else {
                                     if (subquery_matches & 65536) {
                                         location = 2;
-                                        subquery_matches &= location_mask[location];
+                                        subquery_matches &= location_mask[ location ];
                                     } else {
                                         location = 3;
-                                        subquery_matches &= location_mask[location];
+                                        subquery_matches &= location_mask[ location ];
                                     }
                                 }
                             } else {
                                 if (subquery_matches & 1103806595072) {
                                     if (subquery_matches & 4294967296) {
                                         location = 4;
-                                        subquery_matches &= location_mask[location];
+                                        subquery_matches &= location_mask[ location ];
                                     } else {
                                         location = 5;
-                                        subquery_matches &= location_mask[location];
+                                        subquery_matches &= location_mask[ location ];
                                     }
                                 } else {
                                     if (subquery_matches & 281474976710656) {
                                         location = 6;
-                                        subquery_matches &= location_mask[location];
+                                        subquery_matches &= location_mask[ location ];
                                     } else {
                                         location = 7;
-                                        subquery_matches &= location_mask[location];
+                                        subquery_matches &= location_mask[ location ];
                                     }
                                 }
                             }
+                            if (DEBUG) {
+                                printf("    Results of location identification-------------------------------------------------------------\n");
+                                printf("    location(l):            %i", location);
+                                printf("\n");
+                                printf("    ls:                     ");
+                                print_bits(last_sqm);
+                                printf("\n");
+                                printf("    sm(lm):                 ");
+                                print_bits(subquery_matches);
+                                printf("\n");
+                                printf("\n");
+                            }
                             //If we run out of instances
                             if (last_sqm == 0) {
-                                text_modifier +=1;
+                                if (DEBUG) {
+                                    printf("      If: No more instances of first char\n");
+                                    printf("        text_modifier += 1 to account for moving to the next char\n");
+                                }
+                                text_modifier += 1;
                                 //If the text is long enough
-                                if((text_modifier + 8) < text_len) {
+                                if ((text_modifier + 8) < text_len) {
+                                    if (DEBUG) {
+                                        printf("      If: We aren't at the end of the text\n");
+                                        printf("        Set text_window = 0\n");
+                                        printf("        Initialize counter j\n");
+                                        printf("        Initialize initial = 8\n");
+                                    }
                                     //text_modifier += 8;
                                     text_window = 0;
 
                                     int j;
                                     int initial = 8;
-                                    if( (text_len - text_modifier) < 8 ){
+                                    if ((text_len - text_modifier) < 8) {
+                                        if (DEBUG) {
+                                            printf("      If: The remaining text is less than 8 chars\n");
+                                            printf("        Set initial to the length of the remaining text\n");
+                                            printf("        Subtract 1 from initial to account for ending at 0 rather than 1\n");
+                                        }
                                         initial = text_len - text_modifier;
                                         initial--;
                                     }
+                                    text_modifier += initial;
                                     for (j = initial; j >= 0; --j) {
                                         text_window <<= 8;
                                         text_window |= (uint64_t) st[ j + text_modifier ];
                                     }
+                                    if (DEBUG) {
+                                        printf("        Set text_modifier += initial so that it accurately indicates the end of the explored area\n");
+                                        printf("        Move the text window to the begining of the unexplored area\n");
+                                        printf("        Reset last_sqm because we have moved to an unexplored area\n");
+                                        printf("        Set null_force = true so that we skip over moving the window additional times\n");
+                                        printf("        Set changed_subqueries = true so that the first character is looked for again\n");
+                                        printf("        Set null_check = 0 so that we can break out of the while loop\n");
+                                    }
                                     // when we move to the next section of the text we know that whatever we find is after the last subquery
                                     last_sqm = subquery_matches;
+
                                     last_sqm = 0;
-                                    section_shifts++;
-
-                                    //---------------------//
-                                    //Move to next subquery//
-                                    //---------------------//
-                                    if (*(subquery_array + (subquery_count + 1)) != 0) {
-                                        subquery_count++;
-                                        changed_subqueries = true;
-                                        char_ptr = *(subquery_array + subquery_count);
-                                    }
-                                    character = *char_ptr;
-
+                                    null_force = true;
+                                    changed_subqueries = true;
+                                    null_check = 0;
                                     //------------------//
                                     //Restart the search//
                                     //------------------//
                                     //Let it run its course
-                                    null_force = true;
-                                    changed_subqueries = true;
-                                    null_check = 0;
+
                                 } else {
+                                    if (DEBUG) {
+                                        printf("        If: We've reached the end of the text\n");
+                                        printf("          RETURN false\n");
+                                    }
                                     return false;
                                 }
                             } else {
+                                if (DEBUG) {
+                                    printf("      If: We find another instance of the first char in the text window\n");
+                                    printf("        Set location += text_modifier + 1 to move the initial location in the text to one after the instance we just found\n");
+                                    printf("        Reset the counter 'i' so that we move out from the instance as it increases\n");
+                                }
                                 //We have another location! now we need to reset 'i' and adjust the text_modifier
                                 location += text_modifier + 1;
                                 i = 0;
                             }
                         }
                         //Yes! If there's another character check for it!
+                        if (DEBUG) {
+                            printf("      If: Query == Text\n");
+                            printf("        Increase counter 'i'\n");
+                        }
                         i++;
-                        if(!null_force) {
+                        if (!null_force) {
+                            if (DEBUG) {
+                                printf("      If: !null_force check if there is another char in the subquery\n");
+                            }
                             null_check = subquery_array[ subquery_count ][ i ];
                         }
+                    }
+                    if (DEBUG) {
+                        printf("        Save_text_modifier so that we retain the last position that it held");
+                        printf("        Set text_modifier = last_location + 1 so that text_modifier reflects the beginning of the unexplored area");
+                        printf("        ls_location updated to refelct the new location");
                     }
                     save_text_modifier = text_modifier;
                     text_modifier = last_location + 1;
@@ -477,9 +547,27 @@ bool KMP_Experimental_wildcard_arbitrary_length (char st[],
                     // This is a pain point, not fun. simplify into a table
                     // Simplifying did not significantly reduce time 2/18/20 10:01
                     //this setup makes it so that when we move past the end of the window we don't get the right mask
-                    last_mask &= location_mask[i-1];
-                    subquery_matches &= location_mask[i-1];
+                    if (text_modifier > (save_text_modifier + 8)) {
+                        if (DEBUG) {
+                            printf("        IF: The beginning of the unexplored area is beyond the text window");
+                            printf("          Reset last_mask so that we look for the next character in the right place");
+
+                        }
+                        last_mask = LAST_BITS_ON;
+                    } else {
+                        if (DEBUG) {
+                            printf("        IF: The end of the subquery is within the text window");
+                            printf("          last_mask &= the new location of the last character in the subquery");
+                            printf("          subquery_matches is updated with the new location of the last character in the subquery");
+                        }
+                        last_mask &= location_mask[ i - 1 ];
+                        subquery_matches &= location_mask[ i - 1 ];
+                    }
+
+                } else {
+                    //last_mask &= location_mask[ls_location];
                 }
+            // only one char in sq}
                 //--------//
                 //If match//
                 //--------//
@@ -512,9 +600,9 @@ bool KMP_Experimental_wildcard_arbitrary_length (char st[],
                         //-------------------------------//
                         // do we need to move the window?//
                         //-------------------------------//
-                        if(ls_location == 7 || (text_modifier-1) == 7) {
+                        if(ls_location == 7 || (text_modifier-1) >= 7) {
                             if(DEBUG){
-                                printf("    IF: The last char in the subquery is in the last position of the text_window\n");
+                                printf("    IF: The last char in the subquery is in the last position or beyond the text window\n");
                             }
 
 
@@ -531,7 +619,7 @@ bool KMP_Experimental_wildcard_arbitrary_length (char st[],
                             }
 
                             //should just be text_modifier right?
-                            if ((text_modifier + 8) < text_len) {
+                            if (text_modifier < text_len) {
                                 if(DEBUG){
                                     printf("    IF: The new window would start before the end of the text\n");
                                     printf("      Set tw, initialize counter variable, and initial value of counter\n");
@@ -549,19 +637,23 @@ bool KMP_Experimental_wildcard_arbitrary_length (char st[],
                                     initial = text_len - text_modifier;
                                     initial--;
                                 }
+                                //text_modifier += initial; //is increasing the text_modifier too much
                                 for (j = initial; j >= 0; --j) {
                                     text_window <<= 8;
                                     text_window |= (uint64_t) st[ j + text_modifier ];
                                 }
-                                if(DEBUG){
-                                    printf("      tw =                  ");
-                                    print_bits_u(text_window);
-                                    printf("\n");
-                                }
+
                                 // when we move to the next section of the text we know that whatever we find is after the last subquery
-                                prev_section = last_sqm;
+                                if(DEBUG){
+                                    //printf("        Set text_modifier += initial so that it accurately indicates the end of the explored area\n");
+                                    printf("        Move the text window to the begining of the unexplored area\n");
+                                    printf("        Reset last_sqm because we have moved to an unexplored area\n");
+                                    printf("        Move to the next subquery\n");
+                                    printf("        Set changed_subqueries = true so that the first character is looked for again\n");
+                                    printf("        Set save_text_modifier = text_modifier\n");
+
+                                }
                                 last_sqm = 0;
-                                section_shifts++;
 
                                 //---------------------//
                                 //Move to next subquery//
@@ -572,6 +664,7 @@ bool KMP_Experimental_wildcard_arbitrary_length (char st[],
                                     char_ptr = *(subquery_array + subquery_count);
                                 }
                                 character = *char_ptr;
+                                save_text_modifier = text_modifier;
 
                                 //------------------//
                                 //Restart the search//
@@ -617,18 +710,30 @@ bool KMP_Experimental_wildcard_arbitrary_length (char st[],
                 //If mismatch//
                 //-----------//
                 else {
+                    if(DEBUG){
+                        printf("        IF: There was a mismatch\n");
+                    }
                     if(!null_force) {
-
+                        if(DEBUG){
+                            printf("        IF: Not null_force\n");
+                        }
                         //------------//
                         //If more text//
                         //------------//
                         //for infinite text, make sure we don't set the length too short
                         if (forever_text) {
+                            if(DEBUG){
+                                printf("    IF: The text has no end\n");
+                                printf("      text_len(tl) = text_modifier(tm) + 9\n");
+                            }
                             text_len = text_modifier + 1;
                         }
 
                         if (text_modifier < text_len) {
-
+                            if(DEBUG){
+                                printf("    IF: The new window would start before the end of the text\n");
+                                printf("      Set tw, initialize counter variable, and initial value of counter\n");
+                            }
                             //-------------------------------//
                             //If more instances of first char//
                             //-------------------------------//
@@ -636,6 +741,9 @@ bool KMP_Experimental_wildcard_arbitrary_length (char st[],
                                 //-----------------------------------//
                                 //Restart search at: check rest of sq//
                                 //-----------------------------------//
+                                if(DEBUG){
+                                    printf("    IF: There are more instances of the first char in the subquery\n");
+                                }
                                 bypass = true;
                             }
 
@@ -649,32 +757,64 @@ bool KMP_Experimental_wildcard_arbitrary_length (char st[],
                                 //-----------------------------------//
                                 //Move window to end of explored area//
                                 //-----------------------------------//
+                                if(DEBUG){
+                                    printf("    IF: There are no more instances of the first char in the subquery\n");
+                                }
                                 //for infinite text, make sure we don't set the length too short
                                 if (forever_text) {
+                                    if(DEBUG){
+                                        printf("    IF: The text has no end\n");
+                                        printf("      text_len(tl) = text_modifier(tm) + 9\n");
+                                    }
                                     text_len = text_modifier + 1;
                                 }
 
                                 if (text_modifier < text_len) {
+                                    if(DEBUG){
+                                        printf("    IF: The new window would start before the end of the text\n");
+                                        printf("      Set tw, initialize counter variable, and initial value of counter\n");
+                                    }
                                     text_modifier += 8;
                                     text_window = 0;
 
+                                    //Do we need to account for partial windows here?
                                     int j;
                                     for (j = 7; j >= 0; --j) {
                                         text_window <<= 8;
                                         text_window |= (uint64_t) st[ j + text_modifier ];
                                     }
                                     // when we move to the next section of the text we know that whatever we find is after the last subquery
-                                    prev_section = last_sqm;
                                     last_sqm = 0;
-                                    section_shifts++;
+                                    if(DEBUG){
+                                        //printf("        Set text_modifier += initial so that it accurately indicates the end of the explored area\n");
+
+                                       // printf("        Reset last_sqm because we have moved to an unexplored area\n");
+                                        //printf("        Set null_force = true so that we skip over moving the window additional times\n");
+                                       // printf("        Set changed_subqueries = true so that the first character is looked for again\n");
+                                        //printf("        Set null_check = 0 so that we can break out of the while loop\n");
+                                    }
+
 
                                     //---------------------//
                                     //Move to next subquery//
                                     //---------------------//
-                                    if (*(subquery_array + (subquery_count + 1)) != 0) {
-                                        subquery_count++;
-                                        changed_subqueries = true;
-                                        char_ptr = *(subquery_array + subquery_count);
+                                    if(!no_match) {
+                                        if(DEBUG){
+                                            printf("        IF: NOT no_match\n");
+                                            printf("          Move the text window to the begining of the unexplored area\n");
+                                        }
+
+                                        if (*(subquery_array + (subquery_count + 1)) != 0) {
+                                            subquery_count++;
+                                            changed_subqueries = true;
+                                            char_ptr = *(subquery_array + subquery_count);
+                                        }
+                                        character = *char_ptr;
+                                    }
+                                    no_match = false;
+                                    if(DEBUG){
+                                        printf("        Set no_match = false");
+                                        printf("         Restart the search");
                                     }
 
                                     //------------------//
@@ -690,8 +830,18 @@ bool KMP_Experimental_wildcard_arbitrary_length (char st[],
                             //If no more text//
                             //---------------//
                         else {
+                            if(DEBUG){
+                                printf("        IF: There is no more text");
+                                printf("          RETURN false");
+                            }
                             return false;
                         }
+                    } else {
+                        if(DEBUG){
+                            printf("      IF: null_force");
+                            printf("        Reset last_mask");
+                        }
+                        last_mask = LAST_BITS_ON;
                     }
                 }
             }
