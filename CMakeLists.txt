@@ -1,11 +1,6 @@
-cmake_minimum_required(VERSION 3.8)
-project(Wildcard_master)
+cmake_minimum_required(VERSION 3.14)
+project(NewCard C)
 
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_C_STANDARD 99)
 
-set(SOURCE_FILES
-        benchmarking/krauss.h
-        tests.c
-        wildcard.h Experimental_wildcard.h)
-
-add_executable(Wildcard_master ${SOURCE_FILES} Experimental_wildcard.h)
+add_executable(NewCard main.c clean_experimental_wildcard.h wildcard_redesign.h hashtable.h arbitrary_length_wildcard.h arbitrary_location.h rabin_karp.h benchmarking/Allesaandro.h benchmarking/original_krauss.h benchmarking/shift-or.h KMP_arbirary_length_wildcard.h KMP_tester.h overlapping_windows.h benchmarking/dynamic.h benchmarking/KMP.h)
