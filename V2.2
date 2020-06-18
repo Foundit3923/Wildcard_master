@@ -1,6 +1,7 @@
 //
-// Created by Michael Olson on 11/26/2019.
+// Created by Michael Olson on 06/15/2020.
 // Moves through a string looking for a wildcard pattern
+// Experiment with overlapping text windows
 //
 
 #include <stdio.h>
@@ -11,6 +12,7 @@
 #include <inttypes.h>
 #include <time.h>
 #include <math.h>
+#include "KMP_arbitrary_length_wildcard.h"
 
 // Assumes little endian
 
@@ -25,7 +27,6 @@
 #define BYTE_TRAILING_BIT_ON 1 // 00000001
 #define RIGHT_BYTE_ON 255
 #define BYTE_LENGTH 8
-
 #define ALL_BITS_ON 18446744073709551615   // 11111111 repeated 8 times
 #define ALL_BITS_OFF 0                     // 00000000 repeated 8 times
 #define LAST_BITS_ON 72340172838076673     // 00000001 repeated 8 times
@@ -37,9 +38,9 @@
 #define DELIMITER "*" // The wild card itself
 #define DEBUG false
 
-bool Experimental_wildcard_arbitrary_length (char st[],
-                              char** subquery_array,
-                              uint64_t f_m[]) {
+bool Experimental_wildcard_arbitrary_length_V2_2 (char st[],
+                                             char** subquery_array,
+                                             uint64_t f_m[]) {
     //-------------//
     //Preprocessing//
     //-------------//
@@ -85,33 +86,15 @@ bool Experimental_wildcard_arbitrary_length (char st[],
     while(character != 0 && st[text_modifier ] != 0) {
         uint64_t char_to_check = character;
         uint64_t char_mask = f_m[ char_to_check ];
-        //uint64_t char_mask = 0;
-        /*uint64_t char_mask_1 = ((char_to_check << 8) |
-                       char_to_check);                                  // 00000000 00000000 00000000 00000000 00000000 00000000 00000000 11111111 -> 00000000 00000000 00000000 00000000 00000000 00000000 11111111 11111111
-        uint64_t char_mask_2 = ((char_mask_1 << 16) |
-                       char_mask_1);                                    // 00000000 00000000 00000000 00000000 00000000 00000000 11111111 11111111 -> 00000000 00000000 00000000 00000000 11111111 11111111 11111111 11111111
-        char_mask = ((char_mask_2 << 32) |
-                     char_mask_2);                                      // 00000000 00000000 00000000 00000000 11111111 11111111 11111111 11111111 -> 11111111 11111111 11111111 11111111 11111111 11111111 11111111 11111111
-                     */
         encoded_term = ~(char_mask ^ search_term);
         subquery_matches = LAST_BITS_ON;
 
         //Search for matches
-        subquery_matches &= encoded_term;
-        encoded_term >>= 1;
-        subquery_matches &= encoded_term;
-        encoded_term >>= 1;
-        subquery_matches &= encoded_term;
-        encoded_term >>= 1;
-        subquery_matches &= encoded_term;
-        encoded_term >>= 1;
-        subquery_matches &= encoded_term;
-        encoded_term >>= 1;
-        subquery_matches &= encoded_term;
-        encoded_term >>= 1;
-        subquery_matches &= encoded_term;
-        encoded_term >>= 1;
-        subquery_matches &= encoded_term;
+        int match_count;
+        for( match_count = 0; match_count < 8; match_count++){
+            subquery_matches &= encoded_window;
+            encoded_window >>= 1;
+        }
         if (subquery_matches == 0) {
             if(section_shifts < sections) {
                 changed_section = true;
@@ -139,6 +122,7 @@ bool Experimental_wildcard_arbitrary_length (char st[],
             }
         } else {
 
+            // We only find the location of the first char in a subquery
             if (changed_subqueries) {
                 changed_section = false;
                 changed_subqueries = false;
@@ -221,6 +205,7 @@ bool Experimental_wildcard_arbitrary_length (char st[],
                     }
                 }
             } else {
+                // If the char is not the first, we check if it's next to the previous confirmed character
                 //Is the match in the right order?
                 uint64_t check = (last_sqm * 256) & subquery_matches;
                 if (check) {
@@ -242,18 +227,21 @@ bool Experimental_wildcard_arbitrary_length (char st[],
                     }
                     character = *char_ptr;
                 } else {
-                    // reset subquery?
+                    // The character was not next to the previous confirmed character. This is not an auto fail, we check for a variety of conditions before failing or moving on
                     // check for this character in the next section?
                     // check if we changed section, if yes then check if the last character in the previous sqm was in the last position and the current char is in the first position
                     if(changed_section){
                         changed_section = false;
                         if( !(prev_section & 72057594037927936) || !(subquery_matches & 1)){
+                            // True mismatch
                             // reset the subquery
                             char_ptr = *(subquery_array + subquery_count);
                             character = *char_ptr;
                             changed_subqueries = true;
                             shifted_char = false;
-                        } else{
+                        }
+                        // No mismatch, move on to the next char
+                        else{
                             //set last_sqm as 1
                             last_sqm = 1;
                             //Move to next character
@@ -274,7 +262,7 @@ bool Experimental_wildcard_arbitrary_length (char st[],
                         }
 
                     } else {
-
+                        // Check if last_sqm matched in the first position
                         if(last_sqm & 72057594037927936){
                             changed_section = true;
                             text_modifier += 8;
@@ -314,28 +302,8 @@ bool Experimental_wildcard_arbitrary_length (char st[],
                             return false;
                         }
                     }
-                    //check for this character in the next section if the previous character is found in the last position
-                    /*if( last_sqm & 72057594037927936 == 0){
-                        char_ptr = *(subquery_array + subquery_count);
-                    }*/
                 }
             }
-            /*
-            //Move to next character
-            char_ptr++;
-            if (*char_ptr == 0) {
-                //Move to next subquery
-                if (*(subquery_array + (subquery_count + 1)) != 0) {
-                    subquery_count++;
-                    changed_subqueries = true;
-                    char_ptr = *(subquery_array + subquery_count);
-
-                } else {
-                    return true;
-                }
-            }
-            character = *char_ptr;
-             */
         }
     }
     if(st[text_modifier] == 0){

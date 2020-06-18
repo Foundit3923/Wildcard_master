@@ -1,6 +1,5 @@
 
-#include "arbitrary_location.h"
-#include "KMP_arbitrary_length_wildcard.h"
+#include "V2.1.h"
 #include "benchmarking/krauss.h"
 #include "benchmarking/original_krauss.h"
 #include "benchmarking/shift_or.h"
@@ -123,9 +122,14 @@ bool isMatch(char* str, char* pattern){
     return T[strlen(str)][writeIndex];
 }
 
+
+//-------------//
+//KMP Algorithm//
+//-------------//
+
 void computeLPSArray(char* pat, int M, int* lps);
 
-// Prints occurrences of txt[] in pat[]
+// Returns true if instance of pat[] is in txt[]
 bool KMPSearch(char* pat, char* txt)
 {
     bool result = false;
@@ -200,6 +204,10 @@ void computeLPSArray(char* pat, int M, int* lps)
     }
 }
 
+//-----------------//
+//END KMP Algorithm//
+//-----------------//
+
 void remove_all_chars(char* str, char c) {
     char *pr = str, *pw = str;
     while (*pr) {
@@ -216,7 +224,9 @@ void preprocessing( char search_term[],  char query_string[], char check_string[
     bool skip = false;
     subquery = (char**) malloc(sizeof(char*));
     //char* temp_query = (char *) malloc(sizeof(char));
+    //temp_query = "";
     strncpy(temp_query, query_string,strlen(query_string));
+    temp_query[strlen(query_string)] = '\0';
     if(strlen(temp_query) > strlen(query_string)) {
         strncpy(temp_query, temp_query, strlen(query_string));
         temp_query[ strlen(query_string) ] = '\0';
@@ -882,7 +892,7 @@ void preprocessing( char search_term[],  char query_string[], char check_string[
             same_string = true;
         } else {
             criteria_are_met = false;
-        }
+        }/*
         if(!skip) {
 
             // add prerocessing for text and queries longer than 8 characters.
@@ -915,7 +925,7 @@ void preprocessing( char search_term[],  char query_string[], char check_string[
                     }
                 }
             }
-        }
+        }*/
         if(!skip) {
             // add prerocessing for text and queries longer than 8 characters.
             // Split up query into subqueries. Every group of contiguous characters is a
@@ -957,10 +967,15 @@ void expect(char* init_term, char* init_query, bool expectation, char* message)
         t_init_query = (char *) malloc(sizeof(init_query));
         //query_64 = (struct DataItem *) malloc(sizeof(struct DataItem));
 
-        char *temp_query = (char *) malloc(sizeof(char));
+        char *temp_query = (char *) malloc(sizeof(init_query));
+
 
         strncpy(t_init_term, init_term, strlen(init_term));
         strcpy(t_init_query, init_query);
+        t_init_term[strlen(init_term)] = '\0';
+        t_init_query[strlen(init_query)] = '\0';
+
+
 
 
         preprocessing(t_init_term, t_init_query, init_term, temp_query);
@@ -971,6 +986,9 @@ void expect(char* init_term, char* init_query, bool expectation, char* message)
     bool result = false;
     double cpu_time_used = 0;
     double* test_time = my_time;
+    //----------//
+    //Wildfilter//
+    //----------//
     if(test == 0) {
         if (criteria_are_met) {
             if (((*subquery == NULL || subquery == NULL) && init_query != "") || same_string) {
@@ -985,7 +1003,8 @@ void expect(char* init_term, char* init_query, bool expectation, char* message)
 
                 int count;
                 for (count = 0; count < 1000000; count++) {
-                    result = KMP_Experimental_wildcard_arbitrary_length_test(init_term, subquery, full_mask);
+                    //result = KMP_Experimental_wildcard_arbitrary_length_test(init_term, subquery, full_mask);
+                    result = Experimental_wildcard_arbitrary_length_V2_1(init_term, subquery, full_mask);
                 }
                 end = clock();
                 cpu_time_used = ((double) (end - start)) * CLOCKS_PER_SEC;
@@ -1000,6 +1019,10 @@ void expect(char* init_term, char* init_query, bool expectation, char* message)
         }
 
     }
+
+    //-----------//
+    //Competitive//
+    //-----------//
     else {
 
         clock_t start, end;
@@ -1020,6 +1043,9 @@ void expect(char* init_term, char* init_query, bool expectation, char* message)
 
 
 
+    //-----------//
+    //PrintResult//
+    //-----------//
 
     char *expected_return = (char*) malloc(sizeof(char));
     if (expectation == true) expected_return = "true";
@@ -1062,6 +1088,9 @@ void expect(char* init_term, char* init_query, bool expectation, char* message)
 int main() {
 
 
+        //--------//
+        //TestLoop//
+        //--------//
 
         for (test; test < 2; test++) {
             double start, end, cpu_time_used;
@@ -1366,6 +1395,11 @@ int main() {
             cpu_time_used = ((double) (end - start)) * CLOCKS_PER_SEC;
             printf("Total time used: %f \n", cpu_time_used);
 
+
+            //---------------------//
+            //FinalResultComparison//
+            //---------------------//
+
             if (test == 1) {
                 int i = 0;
                 int loss_count = 0;
@@ -1397,10 +1431,7 @@ int main() {
                 printf("total: %f      |   %f               |   Win\n", my_total, krauss_total);
                 printf("Difference: %f \n", (my_total - krauss_total));
                 printf("Win: %i.  Loss: %i \n", win_count, loss_count);
-
             }
-
-
         }
         return 0;
 }
