@@ -13,6 +13,7 @@
 #include <time.h>
 #include <math.h>
 #include "KMP_arbitrary_length_wildcard.h"
+#include <immintrin.h>
 
 // Assumes little endian
 
@@ -29,7 +30,6 @@
 #define BYTE_LENGTH 8
 #define ALL_BITS_ON 18446744073709551615   // 11111111 repeated 8 times
 #define ALL_BITS_OFF 0                     // 00000000 repeated 8 times
-#define LAST_BITS_ON 72340172838076673     // 00000001 repeated 8 times
 #define LAST_BITS_OFF 18374403900871474942 // 11111110 repeated 8 times
 #define TRAILING_BIT_ON 1  // 00000000...64 bits...00000001
 
@@ -39,8 +39,8 @@
 #define DEBUG false
 
 bool Experimental_wildcard_arbitrary_length_V2_3 (char st[],
-                                             char** subquery_array,
-                                             uint64_t f_m[]) {
+                                                  char** subquery_array,
+                                                  __m256d f_m[]) {
     //-------------//
     //Preprocessing//
     //-------------//
@@ -60,30 +60,58 @@ bool Experimental_wildcard_arbitrary_length_V2_3 (char st[],
     sections = ceilf(sections);
     int section_shifts = 1;
 
-    uint64_t anchor_check[8] = {255,65280,16711680,4278190080,1095216660480,280375465082880,71776119061217280,18374686479671624000};
+    //byte masks, all ones for each byte from 0 to 31.
+    __m256d anchor_check[32] = {0xFF,
+                                0xFF00,
+                                0xFF0000,
+                                0xFF000000,
+                                0xFF00000000,
+                                0xFF0000000000,
+                                0xFF000000000000,
+                                0xFF00000000000000,
+                                0xFF0000000000000000,
+                                0xFF000000000000000000,
+                                0xFF00000000000000000000,
+                                0xFF0000000000000000000000,
+                                0xFF000000000000000000000000,
+                                0xFF00000000000000000000000000,
+                                0xFF0000000000000000000000000000,
+                                0xFF000000000000000000000000000000,
+                                0xFF00000000000000000000000000000000,
+                                0xFF0000000000000000000000000000000000,
+                                0xFF000000000000000000000000000000000000,
+                                0xFF00000000000000000000000000000000000000,
+                                0xFF0000000000000000000000000000000000000000,
+                                0xFF000000000000000000000000000000000000000000,
+                                0xFF00000000000000000000000000000000000000000000,
+                                0xFF0000000000000000000000000000000000000000000000,
+                                0xFF000000000000000000000000000000000000000000000000,
+                                0xFF00000000000000000000000000000000000000000000000000,
+                                0xFF0000000000000000000000000000000000000000000000000000,
+                                0xFF000000000000000000000000000000000000000000000000000000,
+                                0xFF00000000000000000000000000000000000000000000000000000000,
+                                0xFF0000000000000000000000000000000000000000000000000000000000,
+                                0xFF000000000000000000000000000000000000000000000000000000000000,
+                                0xFF00000000000000000000000000000000000000000000000000000000000000,
+                                0xFF0000000000000000000000000000000000000000000000000000000000000000};
 
-    uint64_t search_term = 0;
+    __m256d search_term;
     int j;
-    /*
-    for (j = 7; j >= 0; --j) {
-        search_term <<= 8;
-        search_term |= (uint64_t) st[ j + text_modifier ];
-    }
-    */
-
     // 8 * 8 = 64
-    for (j = 0; j < 8; j++) {
+    for (j = 0; j < 32; j++) {
         if(st[j+text_modifier] != '\0') {
-            search_term |= (f_m[st[j + text_modifier]] & anchor_check[j]);
+          search_term = _mm256_or_si256(search_term, _mm256_and_si256(f_m[st[j + text_modifier]], anchor_check[j]) );
         } else {
             break;
         }
     }
 
-    uint64_t subquery_matches = ALL_BITS_ON;
-    uint64_t encoded_term = search_term;
-    uint64_t last_sqm = 0;
-    uint64_t prev_section = 0;
+    __m256d subquery_matches = ALL_BITS_ON;
+    __m256d encoded_term = search_term;
+    __m256d last_sqm = 0;
+    __m256d prev_section = 0;
+    __m256d last_bits_on = 0x101010101010101010101010101010101010101010101010101010101010101;
+
 
 
     bool changed_subqueries = true;
@@ -98,16 +126,16 @@ bool Experimental_wildcard_arbitrary_length_V2_3 (char st[],
     // to account for singlecards '?' we could insert it as a subquery by itself that matches anything and moves the term forwards by one
     while(character != 0 && st[text_modifier ] != 0) {
         // 6
-        uint64_t char_to_check = character;
-        uint64_t char_mask = f_m[ char_to_check ];
-        encoded_term = ~(char_mask ^ search_term);
+        int char_to_check = character;
+        __m256d char_mask = f_m[ char_to_check ];
+        encoded_term = _mm256_xor_si256(char_mask, search_term));
         subquery_matches = LAST_BITS_ON;
 
         //Search for matches
         //4*8 = 32
         int match_count;
         for( match_count = 0; match_count < 8; match_count++){
-            subquery_matches &= encoded_term;
+            subquery_matches = _mm256_and_si256(subquery_matches, encoded_term);
             encoded_term >>= 1;
         }
         if (subquery_matches == 0) {
@@ -117,12 +145,12 @@ bool Experimental_wildcard_arbitrary_length_V2_3 (char st[],
                 search_term = 0;
                 int j;
                 for (j = 7; j >= 0; --j) {
-                    search_term <<= 8;
-                    search_term |= (uint64_t) st[ j + text_modifier ];
+                    search_term = search_term << 8;
+                    search_term = _mm256_or_si256(search_term, st[j + text_modifier]);
                 }
                 // when we move to the next section of the text we know that whatever we find is after the last subquery
                 prev_section = last_sqm;
-                last_sqm = 0;
+                last_sqm = _mm256_xor_si256(last_sqm, last_sqm);
                 section_shifts++;
                 // for when the first character of a subquery is found but the second is not
                 if(shifted_char && !(prev_section & 72057594037927936)){
@@ -143,39 +171,162 @@ bool Experimental_wildcard_arbitrary_length_V2_3 (char st[],
                 changed_subqueries = false;
                 // use last_sqm to find location of previous subquery, mask subquery_matches such that everything up to that point is masked.
                 //3
+                __m256d check_last_sqm;
                 if (last_sqm != 0) {
-                    if (last_sqm & 16843009) {
-                        if (last_sqm & 257) {
-                            if (last_sqm & 1) {
-                                subquery_matches &= 18446744073709551360;
+                    check_last_sqm = 0x1010101010101010101010101010101;
+                    if( _mm256_and_si256(last_sqm, 0x1010101010101010101010101010101)) {
+                        if(_mm256_and_si256(last_sqm, 0x101010101010101)) {
+                            if (_mm256_and_si256(last_sqm, 0x1010101)) {
+                                if (_mm256_and_si256(last_sqm, 0x101)) {
+                                    if (_mm256_and_si256(last_sqm, 0x1)) {
+                                        subquery_matches = _mm256_and_si256(subquery_matches, 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00);
+                                    } else {
+                                        subquery_matches = _mm256_and_si256(subquery_matches, 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF0000);
+                                    }
+                                } else {
+                                    if (_mm256_and_si256(last_sqm, 0x1010000) {
+                                        subquery_matches = _mm256_and_si256(subquery_matches, 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF000000);
+                                    } else {
+                                        subquery_matches = _mm256_and_si256(subquery_matches, 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00000000);
+                                    }
+                                }
                             } else {
-                                subquery_matches &= 18446744073709486080;
+                                if (_mm256_and_si256(last_sqm, 0x10100000000) {
+                                    if (_mm256_and_si256(last_sqm, 0x100000000) {
+                                        subquery_matches = _mm256_and_si256(subquery_matches, 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF0000000000);
+                                    } else {
+                                        subquery_matches = _mm256_and_si256(subquery_matches, 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF000000000000);
+                                    }
+                                } else {
+                                    if (_mm256_and_si256(last_sqm, 0x1000000000000) {
+                                        subquery_matches = _mm256_and_si256(subquery_matches, 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00000000000000);
+                                    } else {
+                                        subquery_matches = _mm256_and_si256(subquery_matches, 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF0000000000000000);
+                                    }
+                                }
                             }
                         } else {
-                            if (last_sqm & 65536) {
-                                subquery_matches &= 18446744073692774400;
+                            if( _mm256_and_si256(last_sqm, 0x1010101000000000000000){
+                                if(_mm256_and_si256(last_sqm, 0x101000000000000000){
+                                    if(_mm256_and_si256(last_sqm, 0x1000000000000000) {
+                                        subquery_matches = _mm256_and_si256(subquery_matches, 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF000000000000000000);
+                                    } else{
+                                        subquery_matches = _mm256_and_si256(subquery_matches, 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00000000000000000000);
+
+                                    }
+
+                                } else {
+                                    if(_mm256_and_si256(last_sqm, 0x10000000000000000000){
+                                        subquery_matches = _mm256_and_si256(subquery_matches, 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF0000000000000000000000);
+
+                                    } else{
+                                        subquery_matches = _mm256_and_si256(subquery_matches, 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF000000000000000000000000);
+
+                                    }
+
+                                }
+
                             } else {
-                                subquery_matches &= 18446744069414584320;
+                                if(_mm256_and_si256(last_sqm, 0x1010000000000000000000000){
+                                    if(_mm256_and_si256(last_sqm, 0x10000000000000000000000) {
+                                        subquery_matches = _mm256_and_si256(subquery_matches, 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00000000000000000000000000);
+
+                                    } else {
+                                        subquery_matches = _mm256_and_si256(subquery_matches, 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF0000000000000000000000000000);
+
+                                    }
+
+                                } else {
+                                    if(_mm256_and_si256(last_sqm, 0x100000000000000000000000000){
+                                        subquery_matches = _mm256_and_si256(subquery_matches, 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF000000000000000000000000000000);
+
+                                    } else{
+                                        subquery_matches = _mm256_and_si256(subquery_matches, 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00000000000000000000000000000000);
+
+                                    }
+
+                                }
                             }
                         }
                     } else {
-                        if (last_sqm & 1103806595072) {
-                            if (last_sqm & 4294967296) {
-                                subquery_matches &= 18446742974197923840;
+                        if(_mm256_and_si256(last_sqm, 0x1010101010101010000000000000000000000000000000)) {
+                            if (_mm256_and_si256(last_sqm, 0x10101010000000000000000000000000000000)) {
+                                if (_mm256_and_si256(last_sqm, 0x1010000000000000000000000000000000)) {
+                                    if (_mm256_and_si256(last_sqm, 0x10000000000000000000000000000000)) {
+                                        subquery_matches = _mm256_and_si256(subquery_matches, 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF0000000000000000000000000000000000);
+                                    } else {
+                                        subquery_matches = _mm256_and_si256(subquery_matches, 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFF000000000000000000000000000000000000);
+                                    }
+                                } else {
+                                    if (_mm256_and_si256(last_sqm, 0x10100000000000000000000000000000000000)) {
+                                        subquery_matches = _mm256_and_si256(subquery_matches, 0xFFFFFFFFFFFFFFFFFFFFFFFFFF00000000000000000000000000000000000000);
+                                    } else {
+                                        subquery_matches = _mm256_and_si256(subquery_matches, 0xFFFFFFFFFFFFFFFFFFFFFFFF0000000000000000000000000000000000000000);
+                                    }
+                                }
                             } else {
-                                subquery_matches &= 18446462598732840960;
+                                if (_mm256_and_si256(last_sqm, 0x101000000000000000000000000000000000000000)) {
+                                    if (_mm256_and_si256(last_sqm, 0x1000000000000000000000000000000000000000)) {
+                                        subquery_matches = _mm256_and_si256(subquery_matches, 0xFFFFFFFFFFFFFFFFFFFFFF000000000000000000000000000000000000000000);
+                                    } else {
+                                        subquery_matches = _mm256_and_si256(subquery_matches, 0xFFFFFFFFFFFFFFFFFFFF00000000000000000000000000000000000000000000);
+                                    }
+                                } else {
+                                    if (_mm256_and_si256(last_sqm, 0x10000000000000000000000000000000000000000000)) {
+                                        subquery_matches = _mm256_and_si256(subquery_matches, 0xFFFFFFFFFFFFFFFFFF0000000000000000000000000000000000000000000000);
+                                    } else {
+                                        subquery_matches = _mm256_and_si256(subquery_matches, 0xFFFFFFFFFFFFFFFF000000000000000000000000000000000000000000000000);
+                                    }
+                                }
                             }
                         } else {
-                            if (last_sqm & 281474976710656) {
-                                subquery_matches &= 18374686479671623680;
+                            if( _mm256_and_si256(last_sqm, 0x10101010000000000000000000000000000000000000000000000)){
+                                if(_mm256_and_si256(last_sqm, 0x1010000000000000000000000000000000000000000000000)){
+                                    if(_mm256_and_si256(last_sqm, 0x10000000000000000000000000000000000000000000000)) {
+                                        subquery_matches = _mm256_and_si256(subquery_matches, 0xFFFFFFFFFFFFFF00000000000000000000000000000000000000000000000000);
+
+                                    } else{
+                                        subquery_matches = _mm256_and_si256(subquery_matches, 0xFFFFFFFFFFFF0000000000000000000000000000000000000000000000000000);
+
+                                    }
+
+                                } else {
+                                    if(_mm256_and_si256(last_sqm, 0x100000000000000000000000000000000000000000000000000)){
+                                        subquery_matches = _mm256_and_si256(subquery_matches, 0xFFFFFFFFFF000000000000000000000000000000000000000000000000000000);
+
+                                    } else{
+                                        subquery_matches = _mm256_and_si256(subquery_matches, 0xFFFFFFFF00000000000000000000000000000000000000000000000000000000);
+
+                                    }
+
+                                }
+
                             } else {
-                                subquery_matches &= 0;
+                                if(_mm256_and_si256(last_sqm, 0x10100000000000000000000000000000000000000000000000000000)){
+                                    if(_mm256_and_si256(last_sqm, 0x100000000000000000000000000000000000000000000000000000)) {
+                                        subquery_matches = _mm256_and_si256(subquery_matches, 0xFFFFFF0000000000000000000000000000000000000000000000000000000000);
+
+                                    } else {
+                                        subquery_matches = _mm256_and_si256(subquery_matches, 0xFFFF000000000000000000000000000000000000000000000000000000000000);
+
+                                    }
+
+                                } else {
+                                    if(_mm256_and_si256(last_sqm, 0x1000000000000000000000000000000000000000000000000000000000)){
+                                        subquery_matches = _mm256_and_si256(subquery_matches, 0xFF00000000000000000000000000000000000000000000000000000000000000);
+
+                                    } else{
+                                        subquery_matches = _mm256_and_si256(subquery_matches, 0x0);
+
+                                    }
+
+                                }
                             }
                         }
                     }
                 }
                 //Are there still matches?
-                if (subquery_matches) {
+                if (subquery_matches > 0) {
                     last_sqm = subquery_matches;
 
                     //Move to next character
@@ -223,7 +374,7 @@ bool Experimental_wildcard_arbitrary_length_V2_3 (char st[],
             } else {
                 // If the char is not the first, we check if it's next to the previous confirmed character
                 //Is the match in the right order?
-                uint64_t check = (last_sqm * 256) & subquery_matches;
+                __m256d check = (last_sqm * 256) & subquery_matches;
                 if (check) {
                     last_sqm = check;
 
@@ -256,7 +407,7 @@ bool Experimental_wildcard_arbitrary_length_V2_3 (char st[],
                             changed_subqueries = true;
                             shifted_char = false;
                         }
-                        // No mismatch, move on to the next char
+                            // No mismatch, move on to the next char
                         else{
                             //set last_sqm as 1
                             last_sqm = 1;
@@ -293,8 +444,8 @@ bool Experimental_wildcard_arbitrary_length_V2_3 (char st[],
                             last_sqm = 0;
                             section_shifts++;
                         }
-                        // this resets subquery erroniously when second caracter in subquery appears in current section,
-                        // should move to next section and check if second character is in first position.
+                            // this resets subquery erroniously when second caracter in subquery appears in current section,
+                            // should move to next section and check if second character is in first position.
                         else if(section_shifts < sections) {
                             changed_section = true;
                             text_modifier += 8;
@@ -329,3 +480,11 @@ bool Experimental_wildcard_arbitrary_length_V2_3 (char st[],
         return true;
     }
 }
+//
+// Created by olson on 6/28/2020.
+//
+
+#ifndef WILDCARD_MASTER_V4_1_H
+#define WILDCARD_MASTER_V4_1_H
+
+#endif //WILDCARD_MASTER_V4_1_H
