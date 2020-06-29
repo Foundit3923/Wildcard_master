@@ -38,7 +38,7 @@
 #define DELIMITER "*" // The wild card itself
 #define DEBUG false
 
-bool Experimental_wildcard_arbitrary_length_V2_2 (char st[],
+bool Experimental_wildcard_arbitrary_length_V2_3 (char st[],
                                              char** subquery_array,
                                              uint64_t f_m[]) {
     //-------------//
@@ -60,11 +60,24 @@ bool Experimental_wildcard_arbitrary_length_V2_2 (char st[],
     sections = ceilf(sections);
     int section_shifts = 1;
 
+    uint64_t anchor_check[8] = {255,65280,16711680,4278190080,1095216660480,280375465082880,71776119061217280,18374686479671624000};
+
     uint64_t search_term = 0;
     int j;
+    /*
     for (j = 7; j >= 0; --j) {
         search_term <<= 8;
-        search_term |= (uint64_t) st[ j + text_modifier];
+        search_term |= (uint64_t) st[ j + text_modifier ];
+    }
+    */
+
+    // 8 * 8 = 64
+    for (j = 0; j < 8; j++) {
+        if(st[j+text_modifier] != '\0') {
+            search_term |= (f_m[st[j + text_modifier]] & anchor_check[j]);
+        } else {
+            break;
+        }
     }
 
     uint64_t subquery_matches = ALL_BITS_ON;
@@ -84,16 +97,18 @@ bool Experimental_wildcard_arbitrary_length_V2_2 (char st[],
 
     // to account for singlecards '?' we could insert it as a subquery by itself that matches anything and moves the term forwards by one
     while(character != 0 && st[text_modifier ] != 0) {
+        // 6
         uint64_t char_to_check = character;
         uint64_t char_mask = f_m[ char_to_check ];
         encoded_term = ~(char_mask ^ search_term);
         subquery_matches = LAST_BITS_ON;
 
         //Search for matches
+        //4*8 = 32
         int match_count;
         for( match_count = 0; match_count < 8; match_count++){
-            subquery_matches &= encoded_window;
-            encoded_window >>= 1;
+            subquery_matches &= encoded_term;
+            encoded_term >>= 1;
         }
         if (subquery_matches == 0) {
             if(section_shifts < sections) {
@@ -127,6 +142,7 @@ bool Experimental_wildcard_arbitrary_length_V2_2 (char st[],
                 changed_section = false;
                 changed_subqueries = false;
                 // use last_sqm to find location of previous subquery, mask subquery_matches such that everything up to that point is masked.
+                //3
                 if (last_sqm != 0) {
                     if (last_sqm & 16843009) {
                         if (last_sqm & 257) {
@@ -306,6 +322,7 @@ bool Experimental_wildcard_arbitrary_length_V2_2 (char st[],
             }
         }
     }
+    // Did we reach the end of the text while a query character remains?
     if(st[text_modifier] == 0){
         return false;
     } else {
