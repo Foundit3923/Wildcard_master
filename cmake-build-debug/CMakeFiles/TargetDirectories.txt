@@ -1,3 +1,0 @@
-/cygdrive/d/Documents/C/Wildcard-master/cmake-build-debug/CMakeFiles/rebuild_cache.dir
-/cygdrive/d/Documents/C/Wildcard-master/cmake-build-debug/CMakeFiles/edit_cache.dir
-/cygdrive/d/Documents/C/Wildcard-master/cmake-build-debug/CMakeFiles/Wildcard_master.dir

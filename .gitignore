@@ -1,0 +1,6 @@
+.idea*
+.vs*
+cmake-build-debug*
+gmp-6.1.2*
+CMakeLists.txt
+test-results-*

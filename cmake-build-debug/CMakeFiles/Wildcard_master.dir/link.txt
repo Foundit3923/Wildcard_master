@@ -1,1 +1,0 @@
-/usr/bin/cc -g  -Wl,--enable-auto-import CMakeFiles/Wildcard_master.dir/tests.c.o  -o Wildcard_master.exe -Wl,--out-implib,libWildcard_master.dll.a -Wl,--major-image-version,0,--minor-image-version,0 
