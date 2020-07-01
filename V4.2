@@ -1,0 +1,472 @@
+//
+// Created by Michael Olson on 06/15/2020.
+// Moves through a string looking for a wildcard pattern
+// Experiment with overlapping text windows
+//
+
+#include <stdio.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <stdbool.h>
+#include <string.h>
+#include <inttypes.h>
+#include <time.h>
+#include <math.h>
+#include "KMP_arbitrary_length_wildcard.h"
+#include <immintrin.h>
+#include "move_text_window.h"
+
+// Assumes little endian
+
+//---------//
+// GLOBALS //
+//---------//
+
+// For making things explicit and avoiding "Magic Numbers"
+// All are hard coded for BYTE_LENGTH == 8 and MAX_TERMS = 8
+// All assume little-endian and that Python is handling the longs properly internally
+
+#define BYTE_TRAILING_BIT_ON 1 // 00000001
+#define RIGHT_BYTE_ON 255
+#define BYTE_LENGTH 8
+#define ALL_BITS_ON 18446744073709551615   // 11111111 repeated 8 times
+#define ALL_BITS_OFF 0                     // 00000000 repeated 8 times
+#define LAST_BITS_OFF 18374403900871474942 // 11111110 repeated 8 times
+#define TRAILING_BIT_ON 1  // 00000000...64 bits...00000001
+
+// More like config constants
+#define MAX_TERMS (sizeof(uint64_t)) // Should be 8
+#define DELIMITER "*" // The wild card itself
+#define DEBUG false
+
+bool Experimental_wildcard_arbitrary_length_V2_3 (char st[],
+                                                  char** subquery_array,
+                                                  __m256i f_m[]) {
+    //-------------//
+    //Preprocessing//
+    //-------------//
+    /* Done externally */
+
+    //----------//
+    //Processing//
+    //----------//
+
+    char character;
+    char* char_ptr;
+
+    // As text_modifier increases by 8 we move to the next section of the text
+    int text_modifier = 0;
+    int text_len = strlen(st);
+    float sections = text_len/8.00;
+    sections = ceilf(sections);
+    int section_shifts = 1;
+
+    //byte masks, all ones for each byte from 0 to 31.
+    __m256i anchor_check[32];
+    anchor_check[0] = _mm256_set1_epi64(0xFF);
+    anchor_check[1] = _mm256_set1_epi64(0xFF00);
+    anchor_check[2] = _mm256_set1_epi64(0xFF0000);
+    anchor_check[3] = _mm256_set1_epi64(0xFF000000);
+    anchor_check[4] = _mm256_set1_epi64(0xFF00000000);
+    anchor_check[5] = _mm256_set1_epi64(0xFF0000000000);
+    anchor_check[6] = _mm256_set1_epi64(0xFF000000000000);
+    anchor_check[7] = _mm256_set1_epi64(0xFF00000000000000);
+    anchor_check[8] = _mm256_set1_epi64(0xFF0000000000000000);
+    anchor_check[9] = _mm256_set1_epi64(0xFF000000000000000000);
+    anchor_check[10] = _mm256_set1_epi64(0xFF00000000000000000000);
+    anchor_check[11 = _mm256_set1_epi64(0xFF0000000000000000000000);
+    anchor_check[12] = _mm256_set1_epi64(0xFF000000000000000000000000);
+    anchor_check[13] = _mm256_set1_epi64(0xFF0000000000000000000000000);
+    anchor_check[14] = _mm256_set1_epi64(0xFF0000000000000000000000000000);
+    anchor_check[15] = _mm256_set1_epi64(0xFF000000000000000000000000000000);
+    anchor_check[16] = _mm256_set1_epi64(0xFF00000000000000000000000000000000);
+    anchor_check[17] = _mm256_set1_epi64(0xFF0000000000000000000000000000000000);
+    anchor_check[18] = _mm256_set1_epi64(0xFF000000000000000000000000000000000000);
+    anchor_check[19] = _mm256_set1_epi64(0xFF00000000000000000000000000000000000000);
+    anchor_check[20] = _mm256_set1_epi64(0xFF0000000000000000000000000000000000000000);
+    anchor_check[21] = _mm256_set1_epi64(0xFF000000000000000000000000000000000000000000);
+    anchor_check[22] = _mm256_set1_epi64(0xFF00000000000000000000000000000000000000000000);
+    anchor_check[23] = _mm256_set1_epi64(0xFF0000000000000000000000000000000000000000000000);
+    anchor_check[24] = _mm256_set1_epi64(0xFF000000000000000000000000000000000000000000000000);
+    anchor_check[25] = _mm256_set1_epi64(0xFF00000000000000000000000000000000000000000000000000);
+    anchor_check[26] = _mm256_set1_epi64(0xFF0000000000000000000000000000000000000000000000000000);
+    anchor_check[27] = _mm256_set1_epi64(0xFF000000000000000000000000000000000000000000000000000000);
+    anchor_check[28] = _mm256_set1_epi64(0xFF00000000000000000000000000000000000000000000000000000000);
+    anchor_check[29] = _mm256_set1_epi64(0xFF0000000000000000000000000000000000000000000000000000000000);
+    anchor_check[30] = _mm256_set1_epi64(0xFF000000000000000000000000000000000000000000000000000000000000);
+    anchor_check[31] = _mm256_set1_epi64(0xFF00000000000000000000000000000000000000000000000000000000000000);
+
+    __m256i search_term;
+    // 8 * 8 = 64
+    search_term = move_text_window(search_term, f_m, anchor_check, st, text_modifier);
+
+    __m256i subquery_matches = _mm256_set1_epi64(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF);
+    __m256i encoded_term = search_term;
+    __m256i last_sqm = _m256_setzero_si256;
+    __m256i prev_section = _m256_setzero_si256;
+    __m256i last_bits_on = _mm256_set1_epi64(0x101010101010101010101010101010101010101010101010101010101010101);
+
+
+
+    bool changed_subqueries = true;
+    bool changed_section = false;
+    bool shifted_char = false;
+    int subquery_count = 0;
+
+    // Points to beginning of array
+    char_ptr = subquery_array[subquery_count];
+    character = *char_ptr;
+
+    // to account for singlecards '?' we could insert it as a subquery by itself that matches anything and moves the term forwards by one
+    while(character != 0 && st[text_modifier ] != 0) {
+        // 6
+        int char_to_check = character;
+        __m256i char_mask = f_m[ char_to_check ];
+        encoded_term = _mm256_xor_si256(char_mask, search_term));
+        subquery_matches = LAST_BITS_ON;
+
+        //Search for matches
+        //4*8 = 32
+        int match_count;
+        for( match_count = 0; match_count < 8; match_count++){
+            subquery_matches = _mm256_and_si256(subquery_matches, encoded_term);
+            encoded_term = __m256i_mm256_srav_epi64(encoded_term, 0x000000000000000000000000000000000000000000000000000000000000000001);
+        }
+        if (subquery_matches == 0) {
+            if(section_shifts < sections) {
+                changed_section = true;
+                text_modifier += 8;
+                search_term = 0;
+                search_term = move_text_window(search_term, f_m, anchor_check, st, text_modifier);
+
+                // when we move to the next section of the text we know that whatever we find is after the last subquery
+                prev_section = last_sqm;
+                last_sqm = _mm256_xor_si256(last_sqm, last_sqm);
+                section_shifts++;
+                // for when the first character of a subquery is found but the second is not
+                if(shifted_char && !_mm256_and_si256(prev_section, 72057594037927936)){
+
+                    // reset the subquery
+                    char_ptr = *(subquery_array + subquery_count);
+                    character = *char_ptr;
+                    changed_subqueries = true;
+                }
+            } else{
+                return false;
+            }
+        } else {
+
+            // We only find the location of the first char in a subquery
+            if (changed_subqueries) {
+                changed_section = false;
+                changed_subqueries = false;
+                // use last_sqm to find location of previous subquery, mask subquery_matches such that everything up to that point is masked.
+                //3
+                __m256i check_last_sqm;
+                if (last_sqm != 0) {
+                    check_last_sqm = 0x1010101010101010101010101010101;
+                    if( _mm256_and_si256(last_sqm, 0x1010101010101010101010101010101)) {
+                        if(_mm256_and_si256(last_sqm, 0x101010101010101)) {
+                            if (_mm256_and_si256(last_sqm, 0x1010101)) {
+                                if (_mm256_and_si256(last_sqm, 0x101)) {
+                                    if (_mm256_and_si256(last_sqm, 0x1)) {
+                                        subquery_matches = _mm256_and_si256(subquery_matches, 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00);
+                                    } else {
+                                        subquery_matches = _mm256_and_si256(subquery_matches, 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF0000);
+                                    }
+                                } else {
+                                    if (_mm256_and_si256(last_sqm, 0x1010000) {
+                                        subquery_matches = _mm256_and_si256(subquery_matches, 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF000000);
+                                    } else {
+                                        subquery_matches = _mm256_and_si256(subquery_matches, 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00000000);
+                                    }
+                                }
+                            } else {
+                                if (_mm256_and_si256(last_sqm, 0x10100000000) {
+                                    if (_mm256_and_si256(last_sqm, 0x100000000) {
+                                        subquery_matches = _mm256_and_si256(subquery_matches, 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF0000000000);
+                                    } else {
+                                        subquery_matches = _mm256_and_si256(subquery_matches, 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF000000000000);
+                                    }
+                                } else {
+                                    if (_mm256_and_si256(last_sqm, 0x1000000000000) {
+                                        subquery_matches = _mm256_and_si256(subquery_matches, 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00000000000000);
+                                    } else {
+                                        subquery_matches = _mm256_and_si256(subquery_matches, 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF0000000000000000);
+                                    }
+                                }
+                            }
+                        } else {
+                            if( _mm256_and_si256(last_sqm, 0x1010101000000000000000){
+                                if(_mm256_and_si256(last_sqm, 0x101000000000000000){
+                                    if(_mm256_and_si256(last_sqm, 0x1000000000000000) {
+                                        subquery_matches = _mm256_and_si256(subquery_matches, 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF000000000000000000);
+                                    } else{
+                                        subquery_matches = _mm256_and_si256(subquery_matches, 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00000000000000000000);
+
+                                    }
+
+                                } else {
+                                    if(_mm256_and_si256(last_sqm, 0x10000000000000000000){
+                                        subquery_matches = _mm256_and_si256(subquery_matches, 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF0000000000000000000000);
+
+                                    } else{
+                                        subquery_matches = _mm256_and_si256(subquery_matches, 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF000000000000000000000000);
+
+                                    }
+
+                                }
+
+                            } else {
+                                if(_mm256_and_si256(last_sqm, 0x1010000000000000000000000){
+                                    if(_mm256_and_si256(last_sqm, 0x10000000000000000000000) {
+                                        subquery_matches = _mm256_and_si256(subquery_matches, 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00000000000000000000000000);
+
+                                    } else {
+                                        subquery_matches = _mm256_and_si256(subquery_matches, 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF0000000000000000000000000000);
+
+                                    }
+
+                                } else {
+                                    if(_mm256_and_si256(last_sqm, 0x100000000000000000000000000){
+                                        subquery_matches = _mm256_and_si256(subquery_matches, 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF000000000000000000000000000000);
+
+                                    } else{
+                                        subquery_matches = _mm256_and_si256(subquery_matches, 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00000000000000000000000000000000);
+
+                                    }
+
+                                }
+                            }
+                        }
+                    } else {
+                        if(_mm256_and_si256(last_sqm, 0x1010101010101010000000000000000000000000000000)) {
+                            if (_mm256_and_si256(last_sqm, 0x10101010000000000000000000000000000000)) {
+                                if (_mm256_and_si256(last_sqm, 0x1010000000000000000000000000000000)) {
+                                    if (_mm256_and_si256(last_sqm, 0x10000000000000000000000000000000)) {
+                                        subquery_matches = _mm256_and_si256(subquery_matches, 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF0000000000000000000000000000000000);
+                                    } else {
+                                        subquery_matches = _mm256_and_si256(subquery_matches, 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFF000000000000000000000000000000000000);
+                                    }
+                                } else {
+                                    if (_mm256_and_si256(last_sqm, 0x10100000000000000000000000000000000000)) {
+                                        subquery_matches = _mm256_and_si256(subquery_matches, 0xFFFFFFFFFFFFFFFFFFFFFFFFFF00000000000000000000000000000000000000);
+                                    } else {
+                                        subquery_matches = _mm256_and_si256(subquery_matches, 0xFFFFFFFFFFFFFFFFFFFFFFFF0000000000000000000000000000000000000000);
+                                    }
+                                }
+                            } else {
+                                if (_mm256_and_si256(last_sqm, 0x101000000000000000000000000000000000000000)) {
+                                    if (_mm256_and_si256(last_sqm, 0x1000000000000000000000000000000000000000)) {
+                                        subquery_matches = _mm256_and_si256(subquery_matches, 0xFFFFFFFFFFFFFFFFFFFFFF000000000000000000000000000000000000000000);
+                                    } else {
+                                        subquery_matches = _mm256_and_si256(subquery_matches, 0xFFFFFFFFFFFFFFFFFFFF00000000000000000000000000000000000000000000);
+                                    }
+                                } else {
+                                    if (_mm256_and_si256(last_sqm, 0x10000000000000000000000000000000000000000000)) {
+                                        subquery_matches = _mm256_and_si256(subquery_matches, 0xFFFFFFFFFFFFFFFFFF0000000000000000000000000000000000000000000000);
+                                    } else {
+                                        subquery_matches = _mm256_and_si256(subquery_matches, 0xFFFFFFFFFFFFFFFF000000000000000000000000000000000000000000000000);
+                                    }
+                                }
+                            }
+                        } else {
+                            if( _mm256_and_si256(last_sqm, 0x10101010000000000000000000000000000000000000000000000)){
+                                if(_mm256_and_si256(last_sqm, 0x1010000000000000000000000000000000000000000000000)){
+                                    if(_mm256_and_si256(last_sqm, 0x10000000000000000000000000000000000000000000000)) {
+                                        subquery_matches = _mm256_and_si256(subquery_matches, 0xFFFFFFFFFFFFFF00000000000000000000000000000000000000000000000000);
+
+                                    } else{
+                                        subquery_matches = _mm256_and_si256(subquery_matches, 0xFFFFFFFFFFFF0000000000000000000000000000000000000000000000000000);
+
+                                    }
+
+                                } else {
+                                    if(_mm256_and_si256(last_sqm, 0x100000000000000000000000000000000000000000000000000)){
+                                        subquery_matches = _mm256_and_si256(subquery_matches, 0xFFFFFFFFFF000000000000000000000000000000000000000000000000000000);
+
+                                    } else{
+                                        subquery_matches = _mm256_and_si256(subquery_matches, 0xFFFFFFFF00000000000000000000000000000000000000000000000000000000);
+
+                                    }
+
+                                }
+
+                            } else {
+                                if(_mm256_and_si256(last_sqm, 0x10100000000000000000000000000000000000000000000000000000)){
+                                    if(_mm256_and_si256(last_sqm, 0x100000000000000000000000000000000000000000000000000000)) {
+                                        subquery_matches = _mm256_and_si256(subquery_matches, 0xFFFFFF0000000000000000000000000000000000000000000000000000000000);
+
+                                    } else {
+                                        subquery_matches = _mm256_and_si256(subquery_matches, 0xFFFF000000000000000000000000000000000000000000000000000000000000);
+
+                                    }
+
+                                } else {
+                                    if(_mm256_and_si256(last_sqm, 0x1000000000000000000000000000000000000000000000000000000000)){
+                                        subquery_matches = _mm256_and_si256(subquery_matches, 0xFF00000000000000000000000000000000000000000000000000000000000000);
+
+                                    } else{
+                                        subquery_matches = _mm256_and_si256(subquery_matches, 0x0);
+
+                                    }
+
+                                }
+                            }
+                        }
+                    }
+                }
+                //Are there still matches?
+                if (subquery_matches > 0) {
+                    last_sqm = subquery_matches;
+
+                    //Move to next character
+                    char_ptr++;
+                    shifted_char = true;
+                    if (*char_ptr == 0) {
+                        //Move to next subquery
+                        if (*(subquery_array + (subquery_count + 1)) != 0) {
+                            subquery_count++;
+                            changed_subqueries = true;
+                            char_ptr = *(subquery_array + subquery_count);
+
+                        } else {
+                            return true;
+                        }
+                    }
+                    character = *char_ptr;
+                } else {
+                    /*
+                     * Move to next section
+                     */
+                    if( section_shifts < sections) {
+                        changed_section = true;
+                        text_modifier += 8;
+                        search_term = 0;
+                        //Adjust for 32 characters and 256 bit operations
+                        search_term = move_text_window(search_term, f_m, anchor_check, st, text_modifier);
+                        // when we move to the next section of the text we know that whatever we find is after the last subquery
+                        prev_section = last_sqm;
+                        last_sqm = 0;
+                        section_shifts++;
+                        // reset the subquery
+                        char_ptr = *(subquery_array + subquery_count);
+                        character = *char_ptr;
+                        changed_subqueries = true;
+                        shifted_char = false;
+                    }
+                    else{
+                        return false;
+                    }
+                }
+            } else {
+                // If the char is not the first, we check if it's next to the previous confirmed character
+                //Is the match in the right order?
+                __m256i check = _mm256_and_si256((last_sqm * 256), subquery_matches);
+                if (check) {
+                    last_sqm = check;
+
+                    //Move to next character
+                    char_ptr++;
+                    if (*char_ptr == 0) {
+                        //Move to next subquery
+                        if (*(subquery_array + (subquery_count + 1)) != 0) {
+                            subquery_count++;
+                            changed_subqueries = true;
+                            char_ptr = *(subquery_array + subquery_count);
+                            shifted_char = false;
+
+                        } else {
+                            return true;
+                        }
+                    }
+                    character = *char_ptr;
+                } else {
+                    // The character was not next to the previous confirmed character. This is not an auto fail, we check for a variety of conditions before failing or moving on
+                    // check for this character in the next section?
+                    // check if we changed section, if yes then check if the last character in the previous sqm was in the last position and the current char is in the first position
+                    if(changed_section){
+                        changed_section = false;
+                        if( !_mm256_and_si256(prev_section, 72057594037927936) || !_mm256_and_si256(subquery_matches, 0x1)){
+                            // True mismatch
+                            // reset the subquery
+                            char_ptr = *(subquery_array + subquery_count);
+                            character = *char_ptr;
+                            changed_subqueries = true;
+                            shifted_char = false;
+                        }
+                            // No mismatch, move on to the next char
+                        else{
+                            //set last_sqm as 1
+                            last_sqm = 0x1;
+                            //Move to next character
+                            char_ptr++;
+                            if (*char_ptr == 0) {
+                                //Move to next subquery
+                                if (*(subquery_array + (subquery_count + 1)) != 0) {
+                                    subquery_count++;
+                                    changed_subqueries = true;
+                                    char_ptr = *(subquery_array + subquery_count);
+                                    shifted_char = false;
+
+                                } else {
+                                    return true;
+                                }
+                            }
+                            character = *char_ptr;
+                        }
+
+                    } else {
+                        // Check if last_sqm matched in the first position
+                        if(last_sqm & 72057594037927936){
+                            changed_section = true;
+                            text_modifier += 8;
+                            search_term = 0;
+                            //Adjust for 32 characters and 256 bit operations
+                            search_term = move_text_window(search_term, f_m, anchor_check, st, text_modifier);
+                            // when we move to the next section of the text we know that whatever we find is after the last subquery
+                            prev_section = last_sqm;
+                            last_sqm = 0;
+                            section_shifts++;
+                        }
+                            // this resets subquery erroniously when second caracter in subquery appears in current section,
+                            // should move to next section and check if second character is in first position.
+                        else if(section_shifts < sections) {
+                            changed_section = true;
+                            text_modifier += 8;
+                            search_term = 0;
+                            //Adjust for 32 characters and 256 bit operations
+                            search_term = move_text_window(search_term, f_m, anchor_check, st, text_modifier);
+                            // when we move to the next section of the text we know that whatever we find is after the last subquery
+                            prev_section = last_sqm;
+                            last_sqm = 0;
+                            section_shifts++;
+                            // reset the subquery
+                            char_ptr = *(subquery_array + subquery_count);
+                            character = *char_ptr;
+                            changed_subqueries = true;
+                            shifted_char = false;
+                        }
+                        else{
+                            return false;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    // Did we reach the end of the text while a query character remains?
+    if(st[text_modifier] == 0){
+        return false;
+    } else {
+        return true;
+    }
+}
+//
+// Created by olson on 6/28/2020.
+//
+
+#ifndef WILDCARD_MASTER_V4_1_H
+#define WILDCARD_MASTER_V4_1_H
+
+#endif //WILDCARD_MASTER_V4_1_H
