@@ -1,5 +1,5 @@
 
-#include "V2.1.h"
+#include "V5.2.h"
 #include "benchmarking/krauss.h"
 #include "benchmarking/original_krauss.h"
 #include "benchmarking/shift_or.h"
@@ -13,16 +13,6 @@
 #define ARBITRARY_TERM_LENGTH true
 #define SINGLE_CHARACATER_WILDCARDS false
 #define WILDCARD_IN_TERM true
-#define SIZE 130
-#define ONE 255
-#define TWO 65280
-#define THREE 16711680
-
-
-
-//struct DataItem* hashArray[SIZE];
-//struct DataItem* query_64;
-//struct DataItem* item;
 
 int tests_run = 0;
 int tests_passed = 0;
@@ -32,6 +22,7 @@ int my_count = 0;
 int krauss_count = 0;
 int wild_count = 0;
 int test_count = 0;
+
 uint64_t full_mask[123];
 
 uint64_t anchor_check[8] = {255,65280,16711680,4278190080,1095216660480,280375465082880,71776119061217280,18374686479671624000};
@@ -52,162 +43,6 @@ bool first_subquery;
 bool last_subquery;
 bool KMP = false;
 
-int wildcmp(const char *wild, const char *string) {
-    // Written by Jack Handy - <A href="mailto:jakkhandy@hotmail.com">jakkhandy@hotmail.com</A>
-    const char *cp = NULL, *mp = NULL;
-
-    while ((*string) && (*wild != '*')) {
-        if ((*wild != *string) && (*wild != '?')) {
-            return 0;
-        }
-        wild++;
-        string++;
-    }
-
-    while (*string) {
-        if (*wild == '*') {
-            if (!*++wild) {
-                return 1;
-            }
-            mp = wild;
-            cp = string+1;
-        } else if ((*wild == *string) || (*wild == '?')) {
-            wild++;
-            string++;
-        } else {
-            wild = mp;
-            string = cp++;
-        }
-    }
-
-    while (*wild == '*') {
-        wild++;
-    }
-    return !*wild;
-}
-
-bool isMatch(char* str, char* pattern){
-    int writeIndex = 0;
-    bool isFirst = true;
-    int i;
-    int j;
-    for( i = 0; i < strlen(pattern); i++){
-        if(pattern[i] == '*'){
-            if(isFirst) {
-                pattern[ writeIndex++ ] = pattern[ i ];
-                isFirst = false;
-            }
-        } else {
-            pattern[writeIndex++] = pattern[i];
-            isFirst = true;
-        }
-
-    }
-    bool T[strlen(str)+1][writeIndex+1];
-    if(writeIndex > 0 && pattern[0] == '*'){
-        T[0][1] = true;
-    }
-    int T_length = strlen(str)+1;
-    int T_0_length = sizeof(T[0]) / sizeof(bool);
-    for(i = 1; i < T_length; i++){
-        for( j = 1; j < T_0_length; j++){
-            if(pattern[j-1] == '?' || str[i-1] == pattern[j-1]){
-                T[i][j] = T[i-1][j-1];
-            } else if(pattern[j-1] == '*'){
-                T[i][j] = T[i-j][j] || T[i][j-1];
-            }
-        }
-
-    }
-    return T[strlen(str)][writeIndex];
-}
-
-
-//-------------//
-//KMP Algorithm//
-//-------------//
-
-void computeLPSArray(char* pat, int M, int* lps);
-
-// Returns true if instance of pat[] is in txt[]
-bool KMPSearch(char* pat, char* txt)
-{
-    bool result = false;
-    int M = strlen(pat);
-    int N = strlen(txt);
-
-    // create lps[] that will hold the longest prefix suffix
-    // values for pattern
-    int lps[M];
-
-    // Preprocess the pattern (calculate lps[] array)
-    computeLPSArray(pat, M, lps);
-
-    int i = 0; // index for txt[]
-    int j = 0; // index for pat[]
-    while (i < N) {
-        if (pat[j] == txt[i]) {
-            j++;
-            i++;
-        }
-
-        if (j == M) {
-            return true;
-        }
-
-            // mismatch after j matches
-        else if (i < N && pat[j] != txt[i]) {
-            // Do not match lps[0..lps[j-1]] characters,
-            // they will match anyway
-            if (j != 0)
-                j = lps[j - 1];
-            else
-                i = i + 1;
-        }
-    }
-    return result;
-}
-
-// Fills lps[] for given patttern pat[0..M-1]
-void computeLPSArray(char* pat, int M, int* lps)
-{
-    // length of the previous longest prefix suffix
-    int len = 0;
-
-    lps[0] = 0; // lps[0] is always 0
-
-    // the loop calculates lps[i] for i = 1 to M-1
-    int i = 1;
-    while (i < M) {
-        if (pat[i] == pat[len]) {
-            len++;
-            lps[i] = len;
-            i++;
-        }
-        else // (pat[i] != pat[len])
-        {
-            // This is tricky. Consider the example.
-            // AAACAAAA and i = 7. The idea is similar
-            // to search step.
-            if (len != 0) {
-                len = lps[len - 1];
-
-                // Also, note that we do not increment
-                // i here
-            }
-            else // if (len == 0)
-            {
-                lps[i] = 0;
-                i++;
-            }
-        }
-    }
-}
-
-//-----------------//
-//END KMP Algorithm//
-//-----------------//
-
 void remove_all_chars(char* str, char c) {
     char *pr = str, *pw = str;
     while (*pr) {
@@ -217,19 +52,22 @@ void remove_all_chars(char* str, char c) {
     *pw = '\0';
 }
 
-void preprocessing( char search_term[],  char query_string[], char check_string[], char *temp_query){
+void preprocessing( char search_term[],  char query_string[], char check_string[], char *temp_query, int term_len, int query_len){
 
-    strncpy(search_term, check_string, sizeof(check_string));
+    int check_len = strlen(check_string);
+    strncpy(search_term, check_string, check_len);
     bool check = criteria_are_met;
     bool skip = false;
     subquery = (char**) malloc(sizeof(char*));
     //char* temp_query = (char *) malloc(sizeof(char));
     //temp_query = "";
-    strncpy(temp_query, query_string,strlen(query_string));
-    temp_query[strlen(query_string)] = '\0';
+    query_string[query_len] = '\0';
+    int query_string_len = strlen(query_string);
+    strncpy(temp_query, query_string,query_len);
+    temp_query[query_len] = '\0';
     if(strlen(temp_query) > strlen(query_string)) {
         strncpy(temp_query, temp_query, strlen(query_string));
-        temp_query[ strlen(query_string) ] = '\0';
+        temp_query[ query_len ] = '\0';
     }
 
     uint64_t expected = 0;
@@ -247,9 +85,10 @@ void preprocessing( char search_term[],  char query_string[], char check_string[
         size_t term_len = strlen(search_term);
 
         //clean the search term of * at the beginning and end
-        if( search_term[0] == '*' || search_term[strlen(search_term) - 1] == '*'){
+        int search_term_len = strlen(search_term);
+        if( search_term[0] == '*' || search_term[search_term_len - 1] == '*'){
             if( search_term[0] == '*' ){
-                if( search_term[strlen(search_term) - 1] == '*' ){
+                if( search_term[search_term_len - 1] == '*' ){
                     char query_input[6] = {search_term[ 1 ],
                                            search_term[ 2 ],
                                            search_term[ 3 ],
@@ -892,40 +731,7 @@ void preprocessing( char search_term[],  char query_string[], char check_string[
             same_string = true;
         } else {
             criteria_are_met = false;
-        }/*
-        if(!skip) {
-
-            // add prerocessing for text and queries longer than 8 characters.
-            // Split up query into subqueries. Every group of contiguous characters is a
-            // single subquery. This also filters out all blank subqueries to account
-            // for multiple delimiters in a row and beginning/end delimiters
-
-            // get the location of the first subquery
-            if (wild_count <= 0) {
-                wild_count = 1;
-            }
-            //wild_count--;
-            if(altered_query) {
-                *subquery = strtok(temp_query, DELIMITER);
-            } else {
-                *subquery = strtok(query_string, DELIMITER);
-            }
-            //temp_subquery[0] = subquery;
-            //iterate through chars in subquery and add their full masks to hashtable
-
-            if (*subquery != NULL) {
-                char *check = (char *) malloc(sizeof(char));
-                strcpy(check, *subquery);
-                int sub_count = 0;
-                if (subquery[ sub_count ] && wild_count >= 1) {
-                    while (sub_count <= wild_count) {
-                        sub_count++;
-                        char *check = strtok(NULL, DELIMITER);
-                        *(subquery + sub_count) = check;
-                    }
-                }
-            }
-        }*/
+        }
         if(!skip) {
             // add prerocessing for text and queries longer than 8 characters.
             // Split up query into subqueries. Every group of contiguous characters is a
@@ -958,33 +764,8 @@ void preprocessing( char search_term[],  char query_string[], char check_string[
     }
 }
 
-void expect(char* init_term, char* init_query, bool expectation, char* message)
-{
-    if( test == 0 || test == 1) {
-        //This setup will need to be changed for the new version. Or the krauss algo will need to be modified to take the
-        //same parameters. No need to use them though
-        t_init_term = (char *) malloc(sizeof(init_term));
-        t_init_query = (char *) malloc(sizeof(init_query));
-        //query_64 = (struct DataItem *) malloc(sizeof(struct DataItem));
-
-        char *temp_query = (char *) malloc(sizeof(init_query));
-
-
-        strncpy(t_init_term, init_term, strlen(init_term));
-        strcpy(t_init_query, init_query);
-        t_init_term[strlen(init_term)] = '\0';
-        t_init_query[strlen(init_query)] = '\0';
-
-
-
-
-        preprocessing(t_init_term, t_init_query, init_term, temp_query);
-    }
-
-
-    bool check = criteria_are_met;
+double* run_tests(char* init_query, char* init_term, bool criteria_are_met, double cpu_time_used, double* r) {
     bool result = false;
-    double cpu_time_used = 0;
     double* test_time = my_time;
     //----------//
     //Wildfilter//
@@ -1004,7 +785,7 @@ void expect(char* init_term, char* init_query, bool expectation, char* message)
                 int count;
                 for (count = 0; count < 1000000; count++) {
                     //result = KMP_Experimental_wildcard_arbitrary_length_test(init_term, subquery, full_mask);
-                    result = Experimental_wildcard_arbitrary_length_V2_1(init_term, subquery, full_mask);
+                    result = Experimental_wildcard_arbitrary_length_V5_2(init_term, subquery, full_mask);
                 }
                 end = clock();
                 cpu_time_used = ((double) (end - start)) * CLOCKS_PER_SEC;
@@ -1020,9 +801,9 @@ void expect(char* init_term, char* init_query, bool expectation, char* message)
 
     }
 
-    //-----------//
-    //Competitive//
-    //-----------//
+        //-----------//
+        //Competitive//
+        //-----------//
     else {
 
         clock_t start, end;
@@ -1040,8 +821,60 @@ void expect(char* init_term, char* init_query, bool expectation, char* message)
         krauss_time[krauss_count] = cpu_time_used;
         krauss_count++;
     }
+    if( result == true ){
+        r[0] = 1;
+    } else {
+        r[0] = 0;
+    }
+    r[1] = cpu_time_used;
+    return r;
+
+}
+
+void expect(char* init_term, char* init_query, bool expectation, char* message)
+{
+    double prepro_cpu_time_used = 0;
+    double cpu_time_used = 0;
+    double* ret = (double*) malloc(sizeof(2));
+    bool result = false;
+    if( test == 0 || test == 1) {
+        //This setup will need to be changed for the new version. Or the krauss algo will need to be modified to take the
+        //same parameters. No need to use them though
+        int term_len = strlen(init_term);
+        int query_len = strlen(init_query);
+        t_init_term = (char *) malloc(term_len);
+        t_init_query = (char *) malloc(query_len);
+        //query_64 = (struct DataItem *) malloc(sizeof(struct DataItem));
+
+        char *temp_query = (char *) malloc(query_len);
 
 
+        strncpy(t_init_term, init_term, term_len);
+        strcpy(t_init_query, init_query);
+        t_init_term[term_len] = '\0';
+        t_init_query[query_len] = '\0';
+
+        clock_t start1;
+        clock_t end1;
+        start1 = clock();
+        preprocessing(t_init_term, t_init_query, init_term, temp_query, term_len, query_len);
+        end1 = clock();
+        prepro_cpu_time_used = ((double) (end1 - start1)) * CLOCKS_PER_SEC;
+    }
+
+    //for debugging purposes
+    bool check = criteria_are_met;
+
+
+    ret = run_tests(init_query, init_term, criteria_are_met, cpu_time_used, ret);
+
+    if(ret[0] == 0){
+        result = false;
+    } else {
+        result = true;
+    }
+    cpu_time_used += ret[1];
+    cpu_time_used += prepro_cpu_time_used;
 
     //-----------//
     //PrintResult//
@@ -1085,40 +918,42 @@ void expect(char* init_term, char* init_query, bool expectation, char* message)
 
 }
 
+void generate_full_masks(){
+    /* Generate all full masks */
+
+    char letters[62] = {'A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R','S','T','U','V','W','X','Y','Z','a','b','c','d','e','f','g','h','i','j','k','l','m','n','o','p','q','r','s','t','u','v','w','x','y','z','1','2','3','4','5','6','7','8','9',' '};
+    int i;
+    for(i = 0; i < 62; i++) {
+        uint64_t char_mask_1;
+        uint64_t char_mask_2;
+        uint64_t char_mask;
+        char char_to_check = letters[i];
+        char_mask_1 = ((char_to_check << 8) |
+                       char_to_check);                                  // 00000000 00000000 00000000 00000000 00000000 00000000 00000000 11111111 -> 00000000 00000000 00000000 00000000 00000000 00000000 11111111 11111111
+        char_mask_2 = ((char_mask_1 << 16) |
+                       char_mask_1);                                     // 00000000 00000000 00000000 00000000 00000000 00000000 11111111 11111111 -> 00000000 00000000 00000000 00000000 11111111 11111111 11111111 11111111
+        char_mask = ((char_mask_2 << 32) |
+                     char_mask_2);                                       // 00000000 00000000 00000000 00000000 11111111 11111111 11111111 11111111 -> 11111111 11111111 11111111 11111111 11111111 11111111 11111111 11111111
+        full_mask[char_to_check] = char_mask;
+    }
+}
 int main() {
+    generate_full_masks();
 
 
-        //--------//
-        //TestLoop//
-        //--------//
+    //--------//
+    //TestLoop//
+    //--------//
 
-        for (test; test < 2; test++) {
-            double start, end, cpu_time_used;
-            start = clock();
+    for (test; test < 2; test++) {
+        double start, end, cpu_time_used;
+        start = clock();
 
-            if (test == 1) {
-                printf("\nKrauss Results\n");
-                printf("---------------------------------------------\n");
-            }
+        if (test == 1) {
+            printf("\nKrauss Results\n");
+            printf("---------------------------------------------\n");
+        }
 
-
-            /* Generate all full masks */
-
-            char letters[62] = {'A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R','S','T','U','V','W','X','Y','Z','a','b','c','d','e','f','g','h','i','j','k','l','m','n','o','p','q','r','s','t','u','v','w','x','y','z','1','2','3','4','5','6','7','8','9',' '};
-            int i;
-            for(i = 0; i < 62; i++) {
-                uint64_t char_mask_1;
-                uint64_t char_mask_2;
-                uint64_t char_mask;
-                char char_to_check = letters[i];
-                char_mask_1 = ((char_to_check << 8) |
-                               char_to_check);                                  // 00000000 00000000 00000000 00000000 00000000 00000000 00000000 11111111 -> 00000000 00000000 00000000 00000000 00000000 00000000 11111111 11111111
-                char_mask_2 = ((char_mask_1 << 16) |
-                               char_mask_1);                                     // 00000000 00000000 00000000 00000000 00000000 00000000 11111111 11111111 -> 00000000 00000000 00000000 00000000 11111111 11111111 11111111 11111111
-                char_mask = ((char_mask_2 << 32) |
-                             char_mask_2);                                       // 00000000 00000000 00000000 00000000 11111111 11111111 11111111 11111111 -> 11111111 11111111 11111111 11111111 11111111 11111111 11111111 11111111
-                full_mask[char_to_check] = char_mask;
-            }
             printf("Testing undefined behavior returning false\n");
             // TODO: Define these undefined behaviors. Right now they return false
             // expect("123456789", "query", false, "too long of a term");
@@ -1165,7 +1000,8 @@ int main() {
             expect("term", "*ter*rm*", false, "minimally overlapping queries");
             expect("term", "*ter*erm*", false, "moderately overlapping queries");
             expect("term", "*term*term*", false, "maximally overlapping queries");
-            expect("Mississippiriver", "*issippi*riv*", true, "Term: Mississippiriver Query: *issippi*riv*"); //Text modifier is increased too much so that *riv* can't be found
+            expect("Mississippiriver", "*issippi*riv*", true,
+                   "Term: Mississippiriver Query: *issippi*riv*"); //Text modifier is increased too much so that *riv* can't be found
             printf("\n");
 
             // Start of Krauss Tests from http://www.drdobbs.com/architecture-and-design/matching-wildcards-an-empirical-way-to-t/240169123#ListingOne
@@ -1252,188 +1088,197 @@ int main() {
                 expect("bLaH", "?LaH", true, " ");
             }
 
-            // Many-wildcard scenarios.
-            if (ARBITRARY_TERM_LENGTH) {
+        // Many-wildcard scenarios.
+        if (ARBITRARY_TERM_LENGTH) {
 
                 expect(
                         "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
                         "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab",
-                        "a*a*a*a*a*a*aa*aaa*a*a*b", true, "Term: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab  Query: a*a*a*a*a*a*aa*aaa*a*a*b");
+                        "a*a*a*a*a*a*aa*aaa*a*a*b", true,
+                        "Term: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab  Query: a*a*a*a*a*a*aa*aaa*a*a*b");
                 expect(
                         "abababababababababababababababababababaacacacacacacaca"
                         "daeafagahaiajakalaaaaaaaaaaaaaaaaaffafagaagggagaaaaaaaab",
-                        "*a*b*ba*ca*a*aa*aaa*fa*ga*b*", true, "Term: abababababababababababababababababababaacacacacacacacadaeafagahaiajakalaaaaaaaaaaaaaaaaaffafagaagggagaaaaaaaab Query: *a*b*ba*ca*a*aa*aaa*fa*ga*b*");
+                        "*a*b*ba*ca*a*aa*aaa*fa*ga*b*", true,
+                        "Term: abababababababababababababababababababaacacacacacacacadaeafagahaiajakalaaaaaaaaaaaaaaaaaffafagaagggagaaaaaaaab Query: *a*b*ba*ca*a*aa*aaa*fa*ga*b*");
                 expect(
                         "abababababababababababababababababababaacacacacacacaca"
                         "daeafagahaiajakalaaaaaaaaaaaaaaaaaffafagaagggagaaaaaaaab",
-                        "*a*b*ba*ca*a*x*aaa*fa*ga*b*", false, "Term: abababababababababababababababababababaacacacacacacacadaeafagahaiajakalaaaaaaaaaaaaaaaaaffafagaagggagaaaaaaaab Query: *a*b*ba*ca*a*x*aaa*fa*ga*b*");
+                        "*a*b*ba*ca*a*x*aaa*fa*ga*b*", false,
+                        "Term: abababababababababababababababababababaacacacacacacacadaeafagahaiajakalaaaaaaaaaaaaaaaaaffafagaagggagaaaaaaaab Query: *a*b*ba*ca*a*x*aaa*fa*ga*b*");
 
                 expect(
                         "abababababababababababababababababababaacacacacacacaca"
                         "daeafagahaiajakalaaaaaaaaaaaaaaaaaffafagaagggagaaaaaaaab",
-                        "*a*b*ba*ca*aaaa*fa*ga*gggg*b*", false, "Term: abababababababababababababababababababaacacacacacacacadaeafagahaiajakalaaaaaaaaaaaaaaaaaffafagaagggagaaaaaaaab Query: *a*b*ba*ca*aaaa*fa*ga*gggg*b*");
+                        "*a*b*ba*ca*aaaa*fa*ga*gggg*b*", false,
+                        "Term: abababababababababababababababababababaacacacacacacacadaeafagahaiajakalaaaaaaaaaaaaaaaaaffafagaagggagaaaaaaaab Query: *a*b*ba*ca*aaaa*fa*ga*gggg*b*");
 
                 /*Fails at *ggg* need to inspect*/expect(
                         "abababababababababababababababababababaacacacacacacacadae"
                         "afagahaiajakalaaaaaaaaaaaaaaaaaffafagaagggagaaaaaaaab",
-                        "*a*b*ba*ca*aaaa*fa*ga*ggg*b*", true, "Term: abababababababababababababababababababaacacacacacacacadaeafagahaiajakalaaaaaaaaaaaaaaaaaffafagaagggagaaaaaaaab Query: *a*b*ba*ca*aaaa*fa*ga*ggg*b*");
+                        "*a*b*ba*ca*aaaa*fa*ga*ggg*b*", true,
+                        "Term: abababababababababababababababababababaacacacacacacacadaeafagahaiajakalaaaaaaaaaaaaaaaaaffafagaagggagaaaaaaaab Query: *a*b*ba*ca*aaaa*fa*ga*ggg*b*");
 
                 expect(
                         "aaabbaabbaab",
                         "*aabbaa*a*", true, "Term: aaabbaabbaab Query: *aabbaa*a*");
                 expect(
                         "a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*",
-                        "a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*", true, "Term: a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a* Query: a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*");
+                        "a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*", true,
+                        "Term: a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a* Query: a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*");
                 expect(
                         "aaaaaaaaaaaaaaaaa",
-                        "*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*", true, "Term: aaaaaaaaaaaaaaaaa Query: *a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*");
+                        "*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*", true,
+                        "Term: aaaaaaaaaaaaaaaaa Query: *a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*");
                 expect(
                         "aaaaaaaaaaaaaaaa",
-                        "*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*", false, "Term: aaaaaaaaaaaaaaaa Query: *a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*");
+                        "*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*", false,
+                        "Term: aaaaaaaaaaaaaaaa Query: *a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*");
                 expect(
                         "abc*abcd*abcde*abcdef*abcdefg*abcdefgh*abcdefghi*abcdefg"
                         "hij*abcdefghijk*abcdefghijkl*abcdefghijklm*abcdefghijklmn",
                         "abc*abc*abc*abc*abc*abc*abc*abc*abc*"
-                        "abc*abc*abc*abc*abc*abc*abc*abc*", false, "Term: abc*abcd*abcde*abcdef*abcdefg*abcdefgh*abcdefghi*abcdefghij*abcdefghijk*abcdefghijkl*abcdefghijklm*abcdefghijklmn Query: abc*abc*abc*abc*abc*abc*abc*abc*abc*abc*abc*abc*abc*abc*abc*abc*abc*");
+                        "abc*abc*abc*abc*abc*abc*abc*abc*", false,
+                        "Term: abc*abcd*abcde*abcdef*abcdefg*abcdefgh*abcdefghi*abcdefghij*abcdefghijk*abcdefghijkl*abcdefghijklm*abcdefghijklmn Query: abc*abc*abc*abc*abc*abc*abc*abc*abc*abc*abc*abc*abc*abc*abc*abc*abc*");
 
                 expect(
                         "abc*abcd*abcde*abcdef*abcdefg*abcdefgh*abcdefghi*abcdefghi"
                         "j*abcdefghijk*abcdefghijkl*abcdefghijklm*abcdefghijklmn",
-                        "abc*abc*abc*abc*abc*abc*abc*abc*abc*abc*abc*abc*", true, "Term: abc*abcd*abcde*abcdef*abcdefg*abcdefgh*abcdefghi*abcdefghij*abcdefghijk*abcdefghijkl*abcdefghijklm*abcdefghijklmn Query: abc*abc*abc*abc*abc*abc*abc*abc*abc*abc*abc*abc*");
+                        "abc*abc*abc*abc*abc*abc*abc*abc*abc*abc*abc*abc*", true,
+                        "Term: abc*abcd*abcde*abcdef*abcdefg*abcdefgh*abcdefghi*abcdefghij*abcdefghijk*abcdefghijkl*abcdefghijklm*abcdefghijklmn Query: abc*abc*abc*abc*abc*abc*abc*abc*abc*abc*abc*abc*");
                 expect(
                         "abc*abcd*abcd*abc*abcd",
                         "abc*abc*abc*abc*abc*", true, "Term: abc*abcd*abcd*abc*abcd Query: abc*abc*abc*abc*abc");
                 expect(
                         "abc*abcd*abcd*abc*abcd*abcd*abc*abcd*abc*abc*abcd",
-                        "abc*abc*abc*abc*abc*abc*abc*abc*abc*abc*abcd", true, "Term: abc*abcd*abcd*abc*abcd*abcd*abc*abcd*abc*abc*abcd Query: abc*abc*abc*abc*abc*abc*abc*abc*abc*abc*abcd");
+                        "abc*abc*abc*abc*abc*abc*abc*abc*abc*abc*abcd", true,
+                        "Term: abc*abcd*abcd*abc*abcd*abcd*abc*abcd*abc*abc*abcd Query: abc*abc*abc*abc*abc*abc*abc*abc*abc*abc*abcd");
                 expect(
                         "********a********b********c********",
                         "abc", false, "Term: ********a********b********c******** Query: abc");
 
-                //if( KMP ) {
-                //    if (test == 1) {
-                //        /*482*/    expect(
-                //                "Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost.",
-                //                "cost", true,
-                //                "Term: Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost. Query: *cost*");
-                //        /*1480*/   expect(
-                //                "Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost. Have you wandered in teh wilderness, the sagebrush desolation, the bunch-grass levels where the cattle graze? Have you whistled bits of rag-time at the end of all creation, and learned to know the desert's little ways? Have you camped upon the foothills, have you galloped o'er the ranges, Have you roamed the arid sun-lands thorugh and through? Have you chummed up with the mesa? Do you know its moods and changes? Then listen to the wild-it's calling you. Have you known the great while silence, not a snow-gemmed twig aquiver? (eternal truths that shame our soothing lies.) Have you broken trail on snowshoes? mushed your huskies up the river, dared the unkown, led the way, and clutched the prize? Have you marked the map's void spaces, mingled with the mongrel races, felt the savage strength of brute in every thew? And though grim as hell the worst is, can you round it off with curses? Then harken to the wild-it's wanting you.",
-                //                "wanting", true,
-                //                "Term: Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost. Query: *wanting*");
-                //        /*2836*/   expect(
-                //                "Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost. Have you wandered in teh wilderness, the sagebrush desolation, the bunch-grass levels where the cattle graze? Have you whistled bits of rag-time at the end of all creation, and learned to know the desert's little ways? Have you camped upon the foothills, have you galloped o'er the ranges, Have you roamed the arid sun-lands thorugh and through? Have you chummed up with the mesa? Do you know its moods and changes? Then listen to the wild-it's calling you. Have you known the great while silence, not a snow-gemmed twig aquiver? (eternal truths that shame our soothing lies.) Have you broken trail on snowshoes? mushed your huskies up the river, dared the unkown, led the way, and clutched the prize? Have you marked the map's void spaces, mingled with the mongrel races, felt the savage strength of brute in every thew? And though grim as hell the worst is, can you round it off with curses? Then harken to the wild-it's wantig you. Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost. Have you wandered in teh wilderness, the sagebrush desolation, the bunch-grass levels where the cattle graze? Have you whistled bits of rag-time at the end of all creation, and learned to know the desert's little ways? Have you camped upon the foothills, have you galloped o'er the ranges, Have you roamed the arid sun-lands thorugh and through? Have you chummed up with the mesa? Do you know its moods and changes? Then listen to the wild-it's calling you. Have you known the great while silence, not a snow-gemmed twig aquiver? (eternal truths that shame our soothing lies.) Have you broken trail on snowshoes? mushed your huskies up the river, dared the unkown, led the way, and clutched the prize? Have you marked the map's void spaces, mingled with the mongrel races, felt the savage strength of brute in every thew? And though grim as hell the worst is, can you round it off with curses? Then harken to the wild-it's wanting you.",
-                //                "wanting", true,
-                //                "Term: Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost. Query: *wanting*");
-                //        /*5672*/   expect(
-                //                "Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost. Have you wandered in teh wilderness, the sagebrush desolation, the bunch-grass levels where the cattle graze? Have you whistled bits of rag-time at the end of all creation, and learned to know the desert's little ways? Have you camped upon the foothills, have you galloped o'er the ranges, Have you roamed the arid sun-lands thorugh and through? Have you chummed up with the mesa? Do you know its moods and changes? Then listen to the wild-it's calling you. Have you known the great while silence, not a snow-gemmed twig aquiver? (eternal truths that shame our soothing lies.) Have you broken trail on snowshoes? mushed your huskies up the river, dared the unkown, led the way, and clutched the prize? Have you marked the map's void spaces, mingled with the mongrel races, felt the savage strength of brute in every thew? And though grim as hell the worst is, can you round it off with curses? Then harken to the wild-it's wantig you. Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost. Have you wandered in teh wilderness, the sagebrush desolation, the bunch-grass levels where the cattle graze? Have you whistled bits of rag-time at the end of all creation, and learned to know the desert's little ways? Have you camped upon the foothills, have you galloped o'er the ranges, Have you roamed the arid sun-lands thorugh and through? Have you chummed up with the mesa? Do you know its moods and changes? Then listen to the wild-it's calling you. Have you known the great while silence, not a snow-gemmed twig aquiver? (eternal truths that shame our soothing lies.) Have you broken trail on snowshoes? mushed your huskies up the river, dared the unkown, led the way, and clutched the prize? Have you marked the map's void spaces, mingled with the mongrel races, felt the savage strength of brute in every thew? And though grim as hell the worst is, can you round it off with curses? Then harken to the wild-it's wantig you. Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost. Have you wandered in teh wilderness, the sagebrush desolation, the bunch-grass levels where the cattle graze? Have you whistled bits of rag-time at the end of all creation, and learned to know the desert's little ways? Have you camped upon the foothills, have you galloped o'er the ranges, Have you roamed the arid sun-lands thorugh and through? Have you chummed up with the mesa? Do you know its moods and changes? Then listen to the wild-it's calling you. Have you known the great while silence, not a snow-gemmed twig aquiver? (eternal truths that shame our soothing lies.) Have you broken trail on snowshoes? mushed your huskies up the river, dared the unkown, led the way, and clutched the prize? Have you marked the map's void spaces, mingled with the mongrel races, felt the savage strength of brute in every thew? And though grim as hell the worst is, can you round it off with curses? Then harken to the wild-it's wantig you. Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost. Have you wandered in teh wilderness, the sagebrush desolation, the bunch-grass levels where the cattle graze? Have you whistled bits of rag-time at the end of all creation, and learned to know the desert's little ways? Have you camped upon the foothills, have you galloped o'er the ranges, Have you roamed the arid sun-lands thorugh and through? Have you chummed up with the mesa? Do you know its moods and changes? Then listen to the wild-it's calling you. Have you known the great while silence, not a snow-gemmed twig aquiver? (eternal truths that shame our soothing lies.) Have you broken trail on snowshoes? mushed your huskies up the river, dared the unkown, led the way, and clutched the prize? Have you marked the map's void spaces, mingled with the mongrel races, felt the savage strength of brute in every thew? And though grim as hell the worst is, can you round it off with curses? Then harken to the wild-it's wanting you.",
-                //                "wanting", true,
-                //                "Term: Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost. Query: *wanting*");
+
+            //if( KMP ) {
+            //    if (test == 1) {
+            //        /*482*/    expect(
+            //                "Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost.",
+            //                "cost", true,
+            //                "Term: Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost. Query: *cost*");
+            //        /*1480*/   expect(
+            //                "Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost. Have you wandered in teh wilderness, the sagebrush desolation, the bunch-grass levels where the cattle graze? Have you whistled bits of rag-time at the end of all creation, and learned to know the desert's little ways? Have you camped upon the foothills, have you galloped o'er the ranges, Have you roamed the arid sun-lands thorugh and through? Have you chummed up with the mesa? Do you know its moods and changes? Then listen to the wild-it's calling you. Have you known the great while silence, not a snow-gemmed twig aquiver? (eternal truths that shame our soothing lies.) Have you broken trail on snowshoes? mushed your huskies up the river, dared the unkown, led the way, and clutched the prize? Have you marked the map's void spaces, mingled with the mongrel races, felt the savage strength of brute in every thew? And though grim as hell the worst is, can you round it off with curses? Then harken to the wild-it's wanting you.",
+            //                "wanting", true,
+            //                "Term: Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost. Query: *wanting*");
+            //        /*2836*/   expect(
+            //                "Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost. Have you wandered in teh wilderness, the sagebrush desolation, the bunch-grass levels where the cattle graze? Have you whistled bits of rag-time at the end of all creation, and learned to know the desert's little ways? Have you camped upon the foothills, have you galloped o'er the ranges, Have you roamed the arid sun-lands thorugh and through? Have you chummed up with the mesa? Do you know its moods and changes? Then listen to the wild-it's calling you. Have you known the great while silence, not a snow-gemmed twig aquiver? (eternal truths that shame our soothing lies.) Have you broken trail on snowshoes? mushed your huskies up the river, dared the unkown, led the way, and clutched the prize? Have you marked the map's void spaces, mingled with the mongrel races, felt the savage strength of brute in every thew? And though grim as hell the worst is, can you round it off with curses? Then harken to the wild-it's wantig you. Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost. Have you wandered in teh wilderness, the sagebrush desolation, the bunch-grass levels where the cattle graze? Have you whistled bits of rag-time at the end of all creation, and learned to know the desert's little ways? Have you camped upon the foothills, have you galloped o'er the ranges, Have you roamed the arid sun-lands thorugh and through? Have you chummed up with the mesa? Do you know its moods and changes? Then listen to the wild-it's calling you. Have you known the great while silence, not a snow-gemmed twig aquiver? (eternal truths that shame our soothing lies.) Have you broken trail on snowshoes? mushed your huskies up the river, dared the unkown, led the way, and clutched the prize? Have you marked the map's void spaces, mingled with the mongrel races, felt the savage strength of brute in every thew? And though grim as hell the worst is, can you round it off with curses? Then harken to the wild-it's wanting you.",
+            //                "wanting", true,
+            //                "Term: Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost. Query: *wanting*");
+            //        /*5672*/   expect(
+            //                "Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost. Have you wandered in teh wilderness, the sagebrush desolation, the bunch-grass levels where the cattle graze? Have you whistled bits of rag-time at the end of all creation, and learned to know the desert's little ways? Have you camped upon the foothills, have you galloped o'er the ranges, Have you roamed the arid sun-lands thorugh and through? Have you chummed up with the mesa? Do you know its moods and changes? Then listen to the wild-it's calling you. Have you known the great while silence, not a snow-gemmed twig aquiver? (eternal truths that shame our soothing lies.) Have you broken trail on snowshoes? mushed your huskies up the river, dared the unkown, led the way, and clutched the prize? Have you marked the map's void spaces, mingled with the mongrel races, felt the savage strength of brute in every thew? And though grim as hell the worst is, can you round it off with curses? Then harken to the wild-it's wantig you. Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost. Have you wandered in teh wilderness, the sagebrush desolation, the bunch-grass levels where the cattle graze? Have you whistled bits of rag-time at the end of all creation, and learned to know the desert's little ways? Have you camped upon the foothills, have you galloped o'er the ranges, Have you roamed the arid sun-lands thorugh and through? Have you chummed up with the mesa? Do you know its moods and changes? Then listen to the wild-it's calling you. Have you known the great while silence, not a snow-gemmed twig aquiver? (eternal truths that shame our soothing lies.) Have you broken trail on snowshoes? mushed your huskies up the river, dared the unkown, led the way, and clutched the prize? Have you marked the map's void spaces, mingled with the mongrel races, felt the savage strength of brute in every thew? And though grim as hell the worst is, can you round it off with curses? Then harken to the wild-it's wantig you. Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost. Have you wandered in teh wilderness, the sagebrush desolation, the bunch-grass levels where the cattle graze? Have you whistled bits of rag-time at the end of all creation, and learned to know the desert's little ways? Have you camped upon the foothills, have you galloped o'er the ranges, Have you roamed the arid sun-lands thorugh and through? Have you chummed up with the mesa? Do you know its moods and changes? Then listen to the wild-it's calling you. Have you known the great while silence, not a snow-gemmed twig aquiver? (eternal truths that shame our soothing lies.) Have you broken trail on snowshoes? mushed your huskies up the river, dared the unkown, led the way, and clutched the prize? Have you marked the map's void spaces, mingled with the mongrel races, felt the savage strength of brute in every thew? And though grim as hell the worst is, can you round it off with curses? Then harken to the wild-it's wantig you. Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost. Have you wandered in teh wilderness, the sagebrush desolation, the bunch-grass levels where the cattle graze? Have you whistled bits of rag-time at the end of all creation, and learned to know the desert's little ways? Have you camped upon the foothills, have you galloped o'er the ranges, Have you roamed the arid sun-lands thorugh and through? Have you chummed up with the mesa? Do you know its moods and changes? Then listen to the wild-it's calling you. Have you known the great while silence, not a snow-gemmed twig aquiver? (eternal truths that shame our soothing lies.) Have you broken trail on snowshoes? mushed your huskies up the river, dared the unkown, led the way, and clutched the prize? Have you marked the map's void spaces, mingled with the mongrel races, felt the savage strength of brute in every thew? And though grim as hell the worst is, can you round it off with curses? Then harken to the wild-it's wanting you.",
+            //                "wanting", true,
+            //                "Term: Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost. Query: *wanting*");
 //
-  //                  } else {
-  //                      expect(
-  //                              "Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost.",
-  //                              "*Have*ther*bl*rip*vast*strung your soul*go*lesson*", true,
-  //                              "Term: Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost. Query: *Have*ther*bl*rip*vast*strung your soul*go*lesson*");
+            //                  } else {
+            //                      expect(
+            //                              "Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost.",
+            //                              "*Have*ther*bl*rip*vast*strung your soul*go*lesson*", true,
+            //                              "Term: Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost. Query: *Have*ther*bl*rip*vast*strung your soul*go*lesson*");
 //
-  //                      /*482*/    expect(
-  //                              "Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost.",
-  //                              "*cost*", true,
-  //                              "Term: Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost. Query: *cost*");
-  //                      /*1480*/   expect(
-  //                              "Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost. Have you wandered in teh wilderness, the sagebrush desolation, the bunch-grass levels where the cattle graze? Have you whistled bits of rag-time at the end of all creation, and learned to know the desert's little ways? Have you camped upon the foothills, have you galloped o'er the ranges, Have you roamed the arid sun-lands thorugh and through? Have you chummed up with the mesa? Do you know its moods and changes? Then listen to the wild-it's calling you. Have you known the great while silence, not a snow-gemmed twig aquiver? (eternal truths that shame our soothing lies.) Have you broken trail on snowshoes? mushed your huskies up the river, dared the unkown, led the way, and clutched the prize? Have you marked the map's void spaces, mingled with the mongrel races, felt the savage strength of brute in every thew? And though grim as hell the worst is, can you round it off with curses? Then harken to the wild-it's wanting you.",
-  //                              "*wanting*", true,
-  //                              "Term: Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost. Query: *wanting*");
-  //                      /*2836*/   expect(
-  //                              "Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost. Have you wandered in teh wilderness, the sagebrush desolation, the bunch-grass levels where the cattle graze? Have you whistled bits of rag-time at the end of all creation, and learned to know the desert's little ways? Have you camped upon the foothills, have you galloped o'er the ranges, Have you roamed the arid sun-lands thorugh and through? Have you chummed up with the mesa? Do you know its moods and changes? Then listen to the wild-it's calling you. Have you known the great while silence, not a snow-gemmed twig aquiver? (eternal truths that shame our soothing lies.) Have you broken trail on snowshoes? mushed your huskies up the river, dared the unkown, led the way, and clutched the prize? Have you marked the map's void spaces, mingled with the mongrel races, felt the savage strength of brute in every thew? And though grim as hell the worst is, can you round it off with curses? Then harken to the wild-it's wantig you. Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost. Have you wandered in teh wilderness, the sagebrush desolation, the bunch-grass levels where the cattle graze? Have you whistled bits of rag-time at the end of all creation, and learned to know the desert's little ways? Have you camped upon the foothills, have you galloped o'er the ranges, Have you roamed the arid sun-lands thorugh and through? Have you chummed up with the mesa? Do you know its moods and changes? Then listen to the wild-it's calling you. Have you known the great while silence, not a snow-gemmed twig aquiver? (eternal truths that shame our soothing lies.) Have you broken trail on snowshoes? mushed your huskies up the river, dared the unkown, led the way, and clutched the prize? Have you marked the map's void spaces, mingled with the mongrel races, felt the savage strength of brute in every thew? And though grim as hell the worst is, can you round it off with curses? Then harken to the wild-it's wanting you.",
-  //                              "*wanting*", true,
-  //                              "Term: Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost. Query: *wanting*");
-  //                      /*5672*/   expect(
-  //                              "Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost. Have you wandered in teh wilderness, the sagebrush desolation, the bunch-grass levels where the cattle graze? Have you whistled bits of rag-time at the end of all creation, and learned to know the desert's little ways? Have you camped upon the foothills, have you galloped o'er the ranges, Have you roamed the arid sun-lands thorugh and through? Have you chummed up with the mesa? Do you know its moods and changes? Then listen to the wild-it's calling you. Have you known the great while silence, not a snow-gemmed twig aquiver? (eternal truths that shame our soothing lies.) Have you broken trail on snowshoes? mushed your huskies up the river, dared the unkown, led the way, and clutched the prize? Have you marked the map's void spaces, mingled with the mongrel races, felt the savage strength of brute in every thew? And though grim as hell the worst is, can you round it off with curses? Then harken to the wild-it's wantig you. Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost. Have you wandered in teh wilderness, the sagebrush desolation, the bunch-grass levels where the cattle graze? Have you whistled bits of rag-time at the end of all creation, and learned to know the desert's little ways? Have you camped upon the foothills, have you galloped o'er the ranges, Have you roamed the arid sun-lands thorugh and through? Have you chummed up with the mesa? Do you know its moods and changes? Then listen to the wild-it's calling you. Have you known the great while silence, not a snow-gemmed twig aquiver? (eternal truths that shame our soothing lies.) Have you broken trail on snowshoes? mushed your huskies up the river, dared the unkown, led the way, and clutched the prize? Have you marked the map's void spaces, mingled with the mongrel races, felt the savage strength of brute in every thew? And though grim as hell the worst is, can you round it off with curses? Then harken to the wild-it's wantig you. Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost. Have you wandered in teh wilderness, the sagebrush desolation, the bunch-grass levels where the cattle graze? Have you whistled bits of rag-time at the end of all creation, and learned to know the desert's little ways? Have you camped upon the foothills, have you galloped o'er the ranges, Have you roamed the arid sun-lands thorugh and through? Have you chummed up with the mesa? Do you know its moods and changes? Then listen to the wild-it's calling you. Have you known the great while silence, not a snow-gemmed twig aquiver? (eternal truths that shame our soothing lies.) Have you broken trail on snowshoes? mushed your huskies up the river, dared the unkown, led the way, and clutched the prize? Have you marked the map's void spaces, mingled with the mongrel races, felt the savage strength of brute in every thew? And though grim as hell the worst is, can you round it off with curses? Then harken to the wild-it's wantig you. Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost. Have you wandered in teh wilderness, the sagebrush desolation, the bunch-grass levels where the cattle graze? Have you whistled bits of rag-time at the end of all creation, and learned to know the desert's little ways? Have you camped upon the foothills, have you galloped o'er the ranges, Have you roamed the arid sun-lands thorugh and through? Have you chummed up with the mesa? Do you know its moods and changes? Then listen to the wild-it's calling you. Have you known the great while silence, not a snow-gemmed twig aquiver? (eternal truths that shame our soothing lies.) Have you broken trail on snowshoes? mushed your huskies up the river, dared the unkown, led the way, and clutched the prize? Have you marked the map's void spaces, mingled with the mongrel races, felt the savage strength of brute in every thew? And though grim as hell the worst is, can you round it off with curses? Then harken to the wild-it's wanting you.",
-  //                              "*wanting*", true,
-  //                              "Term: Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost. Query: *wanting*");
-   //                 }
-   //             } else {
-   //                 */
+            //                      /*482*/    expect(
+            //                              "Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost.",
+            //                              "*cost*", true,
+            //                              "Term: Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost. Query: *cost*");
+            //                      /*1480*/   expect(
+            //                              "Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost. Have you wandered in teh wilderness, the sagebrush desolation, the bunch-grass levels where the cattle graze? Have you whistled bits of rag-time at the end of all creation, and learned to know the desert's little ways? Have you camped upon the foothills, have you galloped o'er the ranges, Have you roamed the arid sun-lands thorugh and through? Have you chummed up with the mesa? Do you know its moods and changes? Then listen to the wild-it's calling you. Have you known the great while silence, not a snow-gemmed twig aquiver? (eternal truths that shame our soothing lies.) Have you broken trail on snowshoes? mushed your huskies up the river, dared the unkown, led the way, and clutched the prize? Have you marked the map's void spaces, mingled with the mongrel races, felt the savage strength of brute in every thew? And though grim as hell the worst is, can you round it off with curses? Then harken to the wild-it's wanting you.",
+            //                              "*wanting*", true,
+            //                              "Term: Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost. Query: *wanting*");
+            //                      /*2836*/   expect(
+            //                              "Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost. Have you wandered in teh wilderness, the sagebrush desolation, the bunch-grass levels where the cattle graze? Have you whistled bits of rag-time at the end of all creation, and learned to know the desert's little ways? Have you camped upon the foothills, have you galloped o'er the ranges, Have you roamed the arid sun-lands thorugh and through? Have you chummed up with the mesa? Do you know its moods and changes? Then listen to the wild-it's calling you. Have you known the great while silence, not a snow-gemmed twig aquiver? (eternal truths that shame our soothing lies.) Have you broken trail on snowshoes? mushed your huskies up the river, dared the unkown, led the way, and clutched the prize? Have you marked the map's void spaces, mingled with the mongrel races, felt the savage strength of brute in every thew? And though grim as hell the worst is, can you round it off with curses? Then harken to the wild-it's wantig you. Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost. Have you wandered in teh wilderness, the sagebrush desolation, the bunch-grass levels where the cattle graze? Have you whistled bits of rag-time at the end of all creation, and learned to know the desert's little ways? Have you camped upon the foothills, have you galloped o'er the ranges, Have you roamed the arid sun-lands thorugh and through? Have you chummed up with the mesa? Do you know its moods and changes? Then listen to the wild-it's calling you. Have you known the great while silence, not a snow-gemmed twig aquiver? (eternal truths that shame our soothing lies.) Have you broken trail on snowshoes? mushed your huskies up the river, dared the unkown, led the way, and clutched the prize? Have you marked the map's void spaces, mingled with the mongrel races, felt the savage strength of brute in every thew? And though grim as hell the worst is, can you round it off with curses? Then harken to the wild-it's wanting you.",
+            //                              "*wanting*", true,
+            //                              "Term: Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost. Query: *wanting*");
+            //                      /*5672*/   expect(
+            //                              "Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost. Have you wandered in teh wilderness, the sagebrush desolation, the bunch-grass levels where the cattle graze? Have you whistled bits of rag-time at the end of all creation, and learned to know the desert's little ways? Have you camped upon the foothills, have you galloped o'er the ranges, Have you roamed the arid sun-lands thorugh and through? Have you chummed up with the mesa? Do you know its moods and changes? Then listen to the wild-it's calling you. Have you known the great while silence, not a snow-gemmed twig aquiver? (eternal truths that shame our soothing lies.) Have you broken trail on snowshoes? mushed your huskies up the river, dared the unkown, led the way, and clutched the prize? Have you marked the map's void spaces, mingled with the mongrel races, felt the savage strength of brute in every thew? And though grim as hell the worst is, can you round it off with curses? Then harken to the wild-it's wantig you. Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost. Have you wandered in teh wilderness, the sagebrush desolation, the bunch-grass levels where the cattle graze? Have you whistled bits of rag-time at the end of all creation, and learned to know the desert's little ways? Have you camped upon the foothills, have you galloped o'er the ranges, Have you roamed the arid sun-lands thorugh and through? Have you chummed up with the mesa? Do you know its moods and changes? Then listen to the wild-it's calling you. Have you known the great while silence, not a snow-gemmed twig aquiver? (eternal truths that shame our soothing lies.) Have you broken trail on snowshoes? mushed your huskies up the river, dared the unkown, led the way, and clutched the prize? Have you marked the map's void spaces, mingled with the mongrel races, felt the savage strength of brute in every thew? And though grim as hell the worst is, can you round it off with curses? Then harken to the wild-it's wantig you. Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost. Have you wandered in teh wilderness, the sagebrush desolation, the bunch-grass levels where the cattle graze? Have you whistled bits of rag-time at the end of all creation, and learned to know the desert's little ways? Have you camped upon the foothills, have you galloped o'er the ranges, Have you roamed the arid sun-lands thorugh and through? Have you chummed up with the mesa? Do you know its moods and changes? Then listen to the wild-it's calling you. Have you known the great while silence, not a snow-gemmed twig aquiver? (eternal truths that shame our soothing lies.) Have you broken trail on snowshoes? mushed your huskies up the river, dared the unkown, led the way, and clutched the prize? Have you marked the map's void spaces, mingled with the mongrel races, felt the savage strength of brute in every thew? And though grim as hell the worst is, can you round it off with curses? Then harken to the wild-it's wantig you. Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost. Have you wandered in teh wilderness, the sagebrush desolation, the bunch-grass levels where the cattle graze? Have you whistled bits of rag-time at the end of all creation, and learned to know the desert's little ways? Have you camped upon the foothills, have you galloped o'er the ranges, Have you roamed the arid sun-lands thorugh and through? Have you chummed up with the mesa? Do you know its moods and changes? Then listen to the wild-it's calling you. Have you known the great while silence, not a snow-gemmed twig aquiver? (eternal truths that shame our soothing lies.) Have you broken trail on snowshoes? mushed your huskies up the river, dared the unkown, led the way, and clutched the prize? Have you marked the map's void spaces, mingled with the mongrel races, felt the savage strength of brute in every thew? And though grim as hell the worst is, can you round it off with curses? Then harken to the wild-it's wanting you.",
+            //                              "*wanting*", true,
+            //                              "Term: Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost. Query: *wanting*");
+            //                 }
+            //             } else {
+            //                 */
 
-                    expect(
-                            "Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost.",
-                            "*Have*ther*bl*rip*vast*strung your soul*go*lesson*", true,
-                            "Term: Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost. Query: *Have*ther*bl*rip*vast*strung your soul*go*lesson*");
+            expect(
+                    "Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost.",
+                    "*Have*ther*bl*rip*vast*strung your soul*go*lesson*", true,
+                    "Term: Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost. Query: *Have*ther*bl*rip*vast*strung your soul*go*lesson*");
 
-                    /*482*/    expect(
-                            "Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost.",
-                            "*cost*", true,
-                            "Term: Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost. Query: *cost*");
-                    /*1480*/   expect(
-                            "Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost. Have you wandered in teh wilderness, the sagebrush desolation, the bunch-grass levels where the cattle graze? Have you whistled bits of rag-time at the end of all creation, and learned to know the desert's little ways? Have you camped upon the foothills, have you galloped o'er the ranges, Have you roamed the arid sun-lands thorugh and through? Have you chummed up with the mesa? Do you know its moods and changes? Then listen to the wild-it's calling you. Have you known the great while silence, not a snow-gemmed twig aquiver? (eternal truths that shame our soothing lies.) Have you broken trail on snowshoes? mushed your huskies up the river, dared the unkown, led the way, and clutched the prize? Have you marked the map's void spaces, mingled with the mongrel races, felt the savage strength of brute in every thew? And though grim as hell the worst is, can you round it off with curses? Then harken to the wild-it's wanting you.",
-                            "*wanting*", true,
-                            "Term: Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost. Query: *wanting*");
-                    /*2836*/   expect(
-                            "Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost. Have you wandered in teh wilderness, the sagebrush desolation, the bunch-grass levels where the cattle graze? Have you whistled bits of rag-time at the end of all creation, and learned to know the desert's little ways? Have you camped upon the foothills, have you galloped o'er the ranges, Have you roamed the arid sun-lands thorugh and through? Have you chummed up with the mesa? Do you know its moods and changes? Then listen to the wild-it's calling you. Have you known the great while silence, not a snow-gemmed twig aquiver? (eternal truths that shame our soothing lies.) Have you broken trail on snowshoes? mushed your huskies up the river, dared the unkown, led the way, and clutched the prize? Have you marked the map's void spaces, mingled with the mongrel races, felt the savage strength of brute in every thew? And though grim as hell the worst is, can you round it off with curses? Then harken to the wild-it's wantig you. Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost. Have you wandered in teh wilderness, the sagebrush desolation, the bunch-grass levels where the cattle graze? Have you whistled bits of rag-time at the end of all creation, and learned to know the desert's little ways? Have you camped upon the foothills, have you galloped o'er the ranges, Have you roamed the arid sun-lands thorugh and through? Have you chummed up with the mesa? Do you know its moods and changes? Then listen to the wild-it's calling you. Have you known the great while silence, not a snow-gemmed twig aquiver? (eternal truths that shame our soothing lies.) Have you broken trail on snowshoes? mushed your huskies up the river, dared the unkown, led the way, and clutched the prize? Have you marked the map's void spaces, mingled with the mongrel races, felt the savage strength of brute in every thew? And though grim as hell the worst is, can you round it off with curses? Then harken to the wild-it's wanting you.",
-                            "*wanting*", true,
-                            "Term: Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost. Query: *wanting*");
-                    /*5672*/   expect(
-                            "Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost. Have you wandered in teh wilderness, the sagebrush desolation, the bunch-grass levels where the cattle graze? Have you whistled bits of rag-time at the end of all creation, and learned to know the desert's little ways? Have you camped upon the foothills, have you galloped o'er the ranges, Have you roamed the arid sun-lands thorugh and through? Have you chummed up with the mesa? Do you know its moods and changes? Then listen to the wild-it's calling you. Have you known the great while silence, not a snow-gemmed twig aquiver? (eternal truths that shame our soothing lies.) Have you broken trail on snowshoes? mushed your huskies up the river, dared the unkown, led the way, and clutched the prize? Have you marked the map's void spaces, mingled with the mongrel races, felt the savage strength of brute in every thew? And though grim as hell the worst is, can you round it off with curses? Then harken to the wild-it's wantig you. Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost. Have you wandered in teh wilderness, the sagebrush desolation, the bunch-grass levels where the cattle graze? Have you whistled bits of rag-time at the end of all creation, and learned to know the desert's little ways? Have you camped upon the foothills, have you galloped o'er the ranges, Have you roamed the arid sun-lands thorugh and through? Have you chummed up with the mesa? Do you know its moods and changes? Then listen to the wild-it's calling you. Have you known the great while silence, not a snow-gemmed twig aquiver? (eternal truths that shame our soothing lies.) Have you broken trail on snowshoes? mushed your huskies up the river, dared the unkown, led the way, and clutched the prize? Have you marked the map's void spaces, mingled with the mongrel races, felt the savage strength of brute in every thew? And though grim as hell the worst is, can you round it off with curses? Then harken to the wild-it's wantig you. Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost. Have you wandered in teh wilderness, the sagebrush desolation, the bunch-grass levels where the cattle graze? Have you whistled bits of rag-time at the end of all creation, and learned to know the desert's little ways? Have you camped upon the foothills, have you galloped o'er the ranges, Have you roamed the arid sun-lands thorugh and through? Have you chummed up with the mesa? Do you know its moods and changes? Then listen to the wild-it's calling you. Have you known the great while silence, not a snow-gemmed twig aquiver? (eternal truths that shame our soothing lies.) Have you broken trail on snowshoes? mushed your huskies up the river, dared the unkown, led the way, and clutched the prize? Have you marked the map's void spaces, mingled with the mongrel races, felt the savage strength of brute in every thew? And though grim as hell the worst is, can you round it off with curses? Then harken to the wild-it's wantig you. Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost. Have you wandered in teh wilderness, the sagebrush desolation, the bunch-grass levels where the cattle graze? Have you whistled bits of rag-time at the end of all creation, and learned to know the desert's little ways? Have you camped upon the foothills, have you galloped o'er the ranges, Have you roamed the arid sun-lands thorugh and through? Have you chummed up with the mesa? Do you know its moods and changes? Then listen to the wild-it's calling you. Have you known the great while silence, not a snow-gemmed twig aquiver? (eternal truths that shame our soothing lies.) Have you broken trail on snowshoes? mushed your huskies up the river, dared the unkown, led the way, and clutched the prize? Have you marked the map's void spaces, mingled with the mongrel races, felt the savage strength of brute in every thew? And though grim as hell the worst is, can you round it off with curses? Then harken to the wild-it's wanting you.",
-                            "*wanting*", true,
-                            "Term: Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost. Query: *wanting*");
+            /*482*/    expect(
+                    "Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost.",
+                    "*cost*", true,
+                    "Term: Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost. Query: *cost*");
+            /*1480*/   expect(
+                    "Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost. Have you wandered in teh wilderness, the sagebrush desolation, the bunch-grass levels where the cattle graze? Have you whistled bits of rag-time at the end of all creation, and learned to know the desert's little ways? Have you camped upon the foothills, have you galloped o'er the ranges, Have you roamed the arid sun-lands thorugh and through? Have you chummed up with the mesa? Do you know its moods and changes? Then listen to the wild-it's calling you. Have you known the great while silence, not a snow-gemmed twig aquiver? (eternal truths that shame our soothing lies.) Have you broken trail on snowshoes? mushed your huskies up the river, dared the unkown, led the way, and clutched the prize? Have you marked the map's void spaces, mingled with the mongrel races, felt the savage strength of brute in every thew? And though grim as hell the worst is, can you round it off with curses? Then harken to the wild-it's wanting you.",
+                    "*wanting*", true,
+                    "Term: Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost. Query: *wanting*");
+            /*2836*/   expect(
+                    "Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost. Have you wandered in teh wilderness, the sagebrush desolation, the bunch-grass levels where the cattle graze? Have you whistled bits of rag-time at the end of all creation, and learned to know the desert's little ways? Have you camped upon the foothills, have you galloped o'er the ranges, Have you roamed the arid sun-lands thorugh and through? Have you chummed up with the mesa? Do you know its moods and changes? Then listen to the wild-it's calling you. Have you known the great while silence, not a snow-gemmed twig aquiver? (eternal truths that shame our soothing lies.) Have you broken trail on snowshoes? mushed your huskies up the river, dared the unkown, led the way, and clutched the prize? Have you marked the map's void spaces, mingled with the mongrel races, felt the savage strength of brute in every thew? And though grim as hell the worst is, can you round it off with curses? Then harken to the wild-it's wantig you. Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost. Have you wandered in teh wilderness, the sagebrush desolation, the bunch-grass levels where the cattle graze? Have you whistled bits of rag-time at the end of all creation, and learned to know the desert's little ways? Have you camped upon the foothills, have you galloped o'er the ranges, Have you roamed the arid sun-lands thorugh and through? Have you chummed up with the mesa? Do you know its moods and changes? Then listen to the wild-it's calling you. Have you known the great while silence, not a snow-gemmed twig aquiver? (eternal truths that shame our soothing lies.) Have you broken trail on snowshoes? mushed your huskies up the river, dared the unkown, led the way, and clutched the prize? Have you marked the map's void spaces, mingled with the mongrel races, felt the savage strength of brute in every thew? And though grim as hell the worst is, can you round it off with curses? Then harken to the wild-it's wanting you.",
+                    "*wanting*", true,
+                    "Term: Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost. Query: *wanting*");
+            /*5672*/   expect(
+                    "Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost. Have you wandered in teh wilderness, the sagebrush desolation, the bunch-grass levels where the cattle graze? Have you whistled bits of rag-time at the end of all creation, and learned to know the desert's little ways? Have you camped upon the foothills, have you galloped o'er the ranges, Have you roamed the arid sun-lands thorugh and through? Have you chummed up with the mesa? Do you know its moods and changes? Then listen to the wild-it's calling you. Have you known the great while silence, not a snow-gemmed twig aquiver? (eternal truths that shame our soothing lies.) Have you broken trail on snowshoes? mushed your huskies up the river, dared the unkown, led the way, and clutched the prize? Have you marked the map's void spaces, mingled with the mongrel races, felt the savage strength of brute in every thew? And though grim as hell the worst is, can you round it off with curses? Then harken to the wild-it's wantig you. Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost. Have you wandered in teh wilderness, the sagebrush desolation, the bunch-grass levels where the cattle graze? Have you whistled bits of rag-time at the end of all creation, and learned to know the desert's little ways? Have you camped upon the foothills, have you galloped o'er the ranges, Have you roamed the arid sun-lands thorugh and through? Have you chummed up with the mesa? Do you know its moods and changes? Then listen to the wild-it's calling you. Have you known the great while silence, not a snow-gemmed twig aquiver? (eternal truths that shame our soothing lies.) Have you broken trail on snowshoes? mushed your huskies up the river, dared the unkown, led the way, and clutched the prize? Have you marked the map's void spaces, mingled with the mongrel races, felt the savage strength of brute in every thew? And though grim as hell the worst is, can you round it off with curses? Then harken to the wild-it's wantig you. Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost. Have you wandered in teh wilderness, the sagebrush desolation, the bunch-grass levels where the cattle graze? Have you whistled bits of rag-time at the end of all creation, and learned to know the desert's little ways? Have you camped upon the foothills, have you galloped o'er the ranges, Have you roamed the arid sun-lands thorugh and through? Have you chummed up with the mesa? Do you know its moods and changes? Then listen to the wild-it's calling you. Have you known the great while silence, not a snow-gemmed twig aquiver? (eternal truths that shame our soothing lies.) Have you broken trail on snowshoes? mushed your huskies up the river, dared the unkown, led the way, and clutched the prize? Have you marked the map's void spaces, mingled with the mongrel races, felt the savage strength of brute in every thew? And though grim as hell the worst is, can you round it off with curses? Then harken to the wild-it's wantig you. Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost. Have you wandered in teh wilderness, the sagebrush desolation, the bunch-grass levels where the cattle graze? Have you whistled bits of rag-time at the end of all creation, and learned to know the desert's little ways? Have you camped upon the foothills, have you galloped o'er the ranges, Have you roamed the arid sun-lands thorugh and through? Have you chummed up with the mesa? Do you know its moods and changes? Then listen to the wild-it's calling you. Have you known the great while silence, not a snow-gemmed twig aquiver? (eternal truths that shame our soothing lies.) Have you broken trail on snowshoes? mushed your huskies up the river, dared the unkown, led the way, and clutched the prize? Have you marked the map's void spaces, mingled with the mongrel races, felt the savage strength of brute in every thew? And though grim as hell the worst is, can you round it off with curses? Then harken to the wild-it's wanting you.",
+                    "*wanting*", true,
+                    "Term: Have you gazed on naked grandeur where there's nothing else to gaze on, set pieces and drop-curtain scenes galore, big mountians heaved to heaven, which the blinding sunsets blazon, black canyons where the rapids rip and roar? Have you swept the visioned valley with the green stream streaking through it, searched the vastness for a something you have lost? Have you strung your soul to silence? Then for God's sake go and do it; Hear the challenge, learn the lesson, pay the cost. Query: *wanting*");
 
-               // }
-            }
-            expect("abc", "********a********b********c********", true,
-                   "Term: abc Query: ********a********b********c********");
-            expect("abc", "********a********b********b********", false,
-                   "Term: abc  Query: ********a********b********b********");
-            expect("*abc*", "***a*b*c***", true, "Term: *abc*  Query: ***a*b*c***");
-            expect("monkeys*", "m*key*s*", true, " ");
-            expect("monkeys*", "*m*o*n*k*e*y*s*", true, " ");
-            printf("\n");
-            //free(query_64);
-
-            printf("Ran %d tests with %d passes and %d failures\n", tests_run, tests_passed, tests_failed);
-
-            end = clock();
-            cpu_time_used = ((double) (end - start)) * CLOCKS_PER_SEC;
-            printf("Total time used: %f \n", cpu_time_used);
-
-
-            //---------------------//
-            //FinalResultComparison//
-            //---------------------//
-
-            if (test == 1) {
-                int i = 0;
-                int loss_count = 0;
-                int win_count = 0;
-                double my_total = 0;
-                double krauss_total = 0;
-                printf("   My Time      |   Krauss Time      |   Result\n");
-                for (i = 0; i < (tests_run / 2); i++) {
-                    if (my_time[ i ] > krauss_time[ i ]) {
-                        printf("   %f      |   %f               |   Loss\n", my_time[ i ], krauss_time[ i ]);
-                        loss_count++;
-                        if (my_time[ i ] == 1000000000000) {
-                            my_total += 0;
-                        } else {
-                            my_total += my_time[ i ];
-                        }
-                        krauss_total += krauss_time[ i ];
-                    } else {
-                        printf("   %f      |   %f               |   Win\n", my_time[ i ], krauss_time[ i ]);
-                        win_count++;
-                        if (my_time[ i ] == 1000000000000) {
-                            my_total += 0;
-                        } else {
-                            my_total += my_time[ i ];
-                        }
-                        krauss_total += krauss_time[ i ];
-                    }
-                }
-                printf("total: %f      |   %f               |   Win\n", my_total, krauss_total);
-                printf("Difference: %f \n", (my_total - krauss_total));
-                printf("Win: %i.  Loss: %i \n", win_count, loss_count);
-            }
+            // }
         }
-        return 0;
+        expect("abc", "********a********b********c********", true,
+               "Term: abc Query: ********a********b********c********");
+        expect("abc", "********a********b********b********", false,
+               "Term: abc  Query: ********a********b********b********");
+        expect("*abc*", "***a*b*c***", true, "Term: *abc*  Query: ***a*b*c***");
+        expect("monkeys*", "m*key*s*", true, " ");
+        expect("monkeys*", "*m*o*n*k*e*y*s*", true, " ");
+        printf("\n");
+        //free(query_64);
+
+        printf("Ran %d tests with %d passes and %d failures\n", tests_run, tests_passed, tests_failed);
+
+        end = clock();
+        cpu_time_used = ((double) (end - start)) * CLOCKS_PER_SEC;
+        printf("Total time used: %f \n", cpu_time_used);
+    }
+
+    //---------------------//
+    //FinalResultComparison//
+    //---------------------//
+
+    int i = 0;
+    int loss_count = 0;
+    int win_count = 0;
+    double my_total = 0;
+    double krauss_total = 0;
+    printf("   My Time      |   Krauss Time      |   Result\n");
+    for (i = 0; i < (tests_run / 2); i++) {
+        if (my_time[ i ] > krauss_time[ i ]) {
+            printf("   %f      |   %f               |   Loss\n", my_time[ i ], krauss_time[ i ]);
+            loss_count++;
+            if (my_time[ i ] == 1000000000000) {
+                my_total += 0;
+            } else {
+                my_total += my_time[ i ];
+            }
+            krauss_total += krauss_time[ i ];
+        } else {
+            printf("   %f      |   %f               |   Win\n", my_time[ i ], krauss_time[ i ]);
+            win_count++;
+            if (my_time[ i ] == 1000000000000) {
+                my_total += 0;
+            } else {
+                my_total += my_time[ i ];
+            }
+            krauss_total += krauss_time[ i ];
+        }
+    }
+    printf("total: %f      |   %f               |   Win\n", my_total, krauss_total);
+    printf("Difference: %f \n", (my_total - krauss_total));
+    printf("Win: %i.  Loss: %i \n", win_count, loss_count);
+    return 0;
 }
 
 
