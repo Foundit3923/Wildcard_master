@@ -38,7 +38,7 @@
 #define DELIMITER "*" // The wild card itself
 #define DEBUG false
 
-bool Experimental_wildcard_arbitrary_length_V2_3 (char st[],
+bool Experimental_wildcard_arbitrary_length_V5_2 (char st[],
                                              char** subquery_array,
                                              uint64_t f_m[]) {
     //-------------//
@@ -59,18 +59,15 @@ bool Experimental_wildcard_arbitrary_length_V2_3 (char st[],
     float sections = text_len/8.00;
     sections = ceilf(sections);
     int section_shifts = 1;
+    int subquery_position = 0;
+    int uniquery_position = 0;
+    int saved_subquery_position = 0;
+    int saved_uniquery_position = 0;
 
-    uint64_t anchor_check[8] = {255,65280,16711680,4278190080,1095216660480,280375465082880,71776119061217280,18374686479671624000};
+    uint64_t anchor_check[8] = {255,65280,16711680,4278190080,1095216660480,280375465082880,71776119061217280,18374686479671623680};
 
     uint64_t search_term = 0;
     int j;
-    /*
-    for (j = 7; j >= 0; --j) {
-        search_term <<= 8;
-        search_term |= (uint64_t) st[ j + text_modifier ];
-    }
-    */
-
     // 8 * 8 = 64
     for (j = 0; j < 8; j++) {
         if(st[j+text_modifier] != '\0') {
@@ -80,7 +77,7 @@ bool Experimental_wildcard_arbitrary_length_V2_3 (char st[],
         }
     }
 
-    uint64_t subquery_matches = ALL_BITS_ON;
+    uint64_t subquery_matches = 0;
     uint64_t encoded_term = search_term;
     uint64_t last_sqm = 0;
     uint64_t prev_section = 0;
@@ -89,6 +86,8 @@ bool Experimental_wildcard_arbitrary_length_V2_3 (char st[],
     bool changed_subqueries = true;
     bool changed_section = false;
     bool shifted_char = false;
+    bool save_point = false;
+    bool picking_up_save_point = false;
     int subquery_count = 0;
 
     // Points to beginning of array
@@ -101,7 +100,9 @@ bool Experimental_wildcard_arbitrary_length_V2_3 (char st[],
         uint64_t char_to_check = character;
         uint64_t char_mask = f_m[ char_to_check ];
         encoded_term = ~(char_mask ^ search_term);
-        subquery_matches = LAST_BITS_ON;
+        if(subquery_matches == 0) {
+            subquery_matches = LAST_BITS_ON;
+        }
 
         //Search for matches
         //4*8 = 32
@@ -111,7 +112,34 @@ bool Experimental_wildcard_arbitrary_length_V2_3 (char st[],
             encoded_term >>= 1;
         }
         if (subquery_matches == 0) {
-            if(section_shifts < sections) {
+            //check if there is a save
+            if(save_point){
+                //reset to save
+                save_point = false;
+                picking_up_save_point = true;
+                char_ptr = subquery_array[saved_subquery_position];
+                char_ptr += saved_uniquery_position + 1;
+                character = *char_ptr;
+                subquery_position = saved_subquery_position;
+                uniquery_position = saved_uniquery_position + 1;
+                saved_subquery_position = 0;
+                saved_uniquery_position = 0;
+
+                //Move text window
+                changed_section = true;
+                text_modifier += 8;
+                search_term = 0;
+                int j;
+                for (j = 7; j >= 0; --j) {
+                    search_term <<= 8;
+                    search_term |= (uint64_t) st[ j + text_modifier ];
+                }
+
+                // when we move to the next section of the text we know that whatever we find is after the last subquery
+                section_shifts++;
+                subquery_matches = 0;
+                // Restart
+            } else if(section_shifts < sections) {
                 changed_section = true;
                 text_modifier += 8;
                 search_term = 0;
@@ -136,191 +164,51 @@ bool Experimental_wildcard_arbitrary_length_V2_3 (char st[],
                 return false;
             }
         } else {
-
-            // We only find the location of the first char in a subquery
-            if (changed_subqueries) {
-                changed_section = false;
-                changed_subqueries = false;
-                // use last_sqm to find location of previous subquery, mask subquery_matches such that everything up to that point is masked.
-                //3
-                if (last_sqm != 0) {
-                    if (last_sqm & 16843009) {
-                        if (last_sqm & 257) {
-                            if (last_sqm & 1) {
-                                subquery_matches &= 18446744073709551360;
-                            } else {
-                                subquery_matches &= 18446744073709486080;
-                            }
-                        } else {
-                            if (last_sqm & 65536) {
-                                subquery_matches &= 18446744073692774400;
-                            } else {
-                                subquery_matches &= 18446744069414584320;
-                            }
-                        }
-                    } else {
-                        if (last_sqm & 1103806595072) {
-                            if (last_sqm & 4294967296) {
-                                subquery_matches &= 18446742974197923840;
-                            } else {
-                                subquery_matches &= 18446462598732840960;
-                            }
-                        } else {
-                            if (last_sqm & 281474976710656) {
-                                subquery_matches &= 18374686479671623680;
-                            } else {
-                                subquery_matches &= 0;
-                            }
-                        }
-                    }
-                }
-                //Are there still matches?
-                if (subquery_matches) {
-                    last_sqm = subquery_matches;
-
-                    //Move to next character
-                    char_ptr++;
-                    shifted_char = true;
-                    if (*char_ptr == 0) {
-                        //Move to next subquery
-                        if (*(subquery_array + (subquery_count + 1)) != 0) {
-                            subquery_count++;
-                            changed_subqueries = true;
-                            char_ptr = *(subquery_array + subquery_count);
-
-                        } else {
-                            return true;
-                        }
-                    }
+            //if there are sq matches then we know that the character we checked for is the right position
+            //if there was a save point and matches we need to check if the match is in the right position
+            if( picking_up_save_point) {
+                picking_up_save_point = false;
+                if(!(subquery_matches & 1)){
+                    char_ptr = *(subquery_array + subquery_count);
                     character = *char_ptr;
-                } else {
-                    /*
-                     * Move to next section
-                     */
-                    if( section_shifts < sections) {
-                        changed_section = true;
-                        text_modifier += 8;
-                        search_term = 0;
-                        int j;
-                        for (j = 7; j >= 0; --j) {
-                            search_term <<= 8;
-                            search_term |= (uint64_t) st[ j + text_modifier ];
-                        }
-                        // when we move to the next section of the text we know that whatever we find is after the last subquery
-                        prev_section = last_sqm;
-                        last_sqm = 0;
-                        section_shifts++;
-                        // reset the subquery
-                        char_ptr = *(subquery_array + subquery_count);
-                        character = *char_ptr;
-                        changed_subqueries = true;
-                        shifted_char = false;
-                    }
-                    else{
-                        return false;
-                    }
-                }
-            } else {
-                // If the char is not the first, we check if it's next to the previous confirmed character
-                //Is the match in the right order?
-                uint64_t check = (last_sqm * 256) & subquery_matches;
-                if (check) {
-                    last_sqm = check;
-
-                    //Move to next character
-                    char_ptr++;
-                    if (*char_ptr == 0) {
-                        //Move to next subquery
-                        if (*(subquery_array + (subquery_count + 1)) != 0) {
-                            subquery_count++;
-                            changed_subqueries = true;
-                            char_ptr = *(subquery_array + subquery_count);
-                            shifted_char = false;
-
-                        } else {
-                            return true;
-                        }
-                    }
-                    character = *char_ptr;
-                } else {
-                    // The character was not next to the previous confirmed character. This is not an auto fail, we check for a variety of conditions before failing or moving on
-                    // check for this character in the next section?
-                    // check if we changed section, if yes then check if the last character in the previous sqm was in the last position and the current char is in the first position
-                    if(changed_section){
-                        changed_section = false;
-                        if( !(prev_section & 72057594037927936) || !(subquery_matches & 1)){
-                            // True mismatch
-                            // reset the subquery
-                            char_ptr = *(subquery_array + subquery_count);
-                            character = *char_ptr;
-                            changed_subqueries = true;
-                            shifted_char = false;
-                        }
-                        // No mismatch, move on to the next char
-                        else{
-                            //set last_sqm as 1
-                            last_sqm = 1;
-                            //Move to next character
-                            char_ptr++;
-                            if (*char_ptr == 0) {
-                                //Move to next subquery
-                                if (*(subquery_array + (subquery_count + 1)) != 0) {
-                                    subquery_count++;
-                                    changed_subqueries = true;
-                                    char_ptr = *(subquery_array + subquery_count);
-                                    shifted_char = false;
-
-                                } else {
-                                    return true;
-                                }
-                            }
-                            character = *char_ptr;
-                        }
-
-                    } else {
-                        // Check if last_sqm matched in the first position
-                        if(last_sqm & 72057594037927936){
-                            changed_section = true;
-                            text_modifier += 8;
-                            search_term = 0;
-                            int j;
-                            for (j = 7; j >= 0; --j) {
-                                search_term <<= 8;
-                                search_term |= (uint64_t) st[ j + text_modifier ];
-                            }
-                            // when we move to the next section of the text we know that whatever we find is after the last subquery
-                            prev_section = last_sqm;
-                            last_sqm = 0;
-                            section_shifts++;
-                        }
-                        // this resets subquery erroniously when second caracter in subquery appears in current section,
-                        // should move to next section and check if second character is in first position.
-                        else if(section_shifts < sections) {
-                            changed_section = true;
-                            text_modifier += 8;
-                            search_term = 0;
-                            int j;
-                            for (j = 7; j >= 0; --j) {
-                                search_term <<= 8;
-                                search_term |= (uint64_t) st[ j + text_modifier ];
-                            }
-                            // when we move to the next section of the text we know that whatever we find is after the last subquery
-                            prev_section = last_sqm;
-                            last_sqm = 0;
-                            section_shifts++;
-                            // reset the subquery
-                            char_ptr = *(subquery_array + subquery_count);
-                            character = *char_ptr;
-                            changed_subqueries = true;
-                            shifted_char = false;
-                        }
-                        else{
-                            return false;
-                        }
-                    }
+                    subquery_matches = 0;
                 }
             }
+            //now we check if anything is in the last position, if it is then we save the query position
+            //if the last position is not set then we shift sqm and restart
+            if( subquery_matches & anchor_check[7]) {
+                //save some how
+                if (char_ptr++) {
+                    char_ptr--;
+                    save_point = true;
+                    saved_subquery_position = subquery_position;
+                    saved_uniquery_position = uniquery_position;
+                }
+            }
+            //Move to next character
+            char_ptr++;
+            uniquery_position++;
+            shifted_char = true;
+            if (*char_ptr == 0) {
+                //Move to next subquery
+                if (*(subquery_array + (subquery_count + 1)) != 0) {
+                    subquery_count++;
+                    subquery_position++;
+                    changed_subqueries = true;
+                    char_ptr = *(subquery_array + subquery_count);
+                    subquery_matches = 0;
+
+                } else {
+                    return true;
+                }
+            }
+            character = *char_ptr;
+            if(subquery_matches) {
+                subquery_matches <<= 8;
+            }
+
         }
+
     }
     // Did we reach the end of the text while a query character remains?
     if(st[text_modifier] == 0){
