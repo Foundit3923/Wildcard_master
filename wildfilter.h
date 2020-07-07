@@ -12,7 +12,6 @@
 #include <inttypes.h>
 #include <time.h>
 #include <math.h>
-#include "KMP_arbitrary_length_wildcard.h"
 
 // Assumes little endian
 
