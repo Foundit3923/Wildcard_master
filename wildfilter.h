@@ -20,76 +20,66 @@
 //---------//
 
 #define LAST_BITS_ON 72340172838076673     // 00000001 repeated 8 times
+#define filter(a,b) (b &= (a & (a & (a & (a>>4)>>2)>>1)))
+#define encode(a,b,c) (c = ~(a ^ b))
+#define move(a,b,c) (a = &b[c])
+#define sub(a,b) (a = a - b)
 
 union Window {
     uint64_t* i;
     char* c;
+    uint8_t e_i;
 }Window;
 
-bool Experimental_wildcard_arbitrary_length_moving_union_1 (char st[],
-                                                            char* subquery_array,
-                                                            uint64_t f_m[]) {
+bool Experimental_wildcard_arbitrary_length_moving_union_save (char st[],
+                                                               char* subquery_array,
+                                                               uint64_t f_m[]) {
     //----------//
     //Processing//
     //----------//
 
     char* char_ptr;
-    char* save;
 
-    // As text_modifier increases by 8 we move to the next section of the text
-    int text_modifier = 0;
+
     int text_len = strlen(st);
+    int query_len = strlen(subquery_array);
+    int text_modifier = query_len-1;
 
+    int backtrack_location = text_modifier - (query_len-1);
+    int backtrack_count = 0;
+    int n = text_modifier;
     union Window t_w;
     t_w.c = &st[text_modifier];
 
-    uint64_t subquery_matches = 0;
-    uint64_t encoded_term;
+    uint64_t query_matches = LAST_BITS_ON;
+    uint64_t encoded_text;
+    uint64_t encoded_text_2 = 0;
+    char_ptr = subquery_array;
 
-    int subquery_count = 0;
-
-    // Points to beginning of array
-    char_ptr = &subquery_array[subquery_count];
-    save = char_ptr;
-
-    while(char_ptr != '\000' && text_len >= text_modifier) {
-        if(*char_ptr == '*'){
-            char_ptr++;
-            save = char_ptr;
-            subquery_matches = 0;
-            if(!*char_ptr){
-                return true;
-            }
-        }
-        encoded_term = ~(f_m[*char_ptr] ^ *t_w.i);
-        if(!subquery_matches) {
-            subquery_matches = LAST_BITS_ON;
-        }
-        //Search for matches
-        int match_count;
-        for( match_count = 0; match_count < 8; match_count++){
-            subquery_matches &= encoded_term;
-            encoded_term >>= 1;
-        }
-        if (!subquery_matches) {
-            //no matches, move on
-            text_modifier += 8;
-            if(text_modifier < text_len) {
-                t_w.c = &st[text_modifier];
-                char_ptr = save;
-                subquery_matches = 0;
+    while(*char_ptr != '\000' && text_len >= text_modifier) {
+        encoded_text = ~(f_m[*char_ptr] ^ *t_w.i);
+        encoded_text_2 = encoded_text & encoded_text>>4;
+        encoded_text_2 = encoded_text_2 & encoded_text_2>>2;
+        encoded_text = encoded_text_2 & encoded_text_2>>1;
+        query_matches &= encoded_text;
+        if (query_matches) {
+            if(backtrack_count) {
+                char_ptr++;
+                backtrack_count++;
+                t_w.c = &st[backtrack_count];
             } else {
-                return false;
+                char_ptr++;
+                backtrack_count = backtrack_location;
+                t_w.c = &st[backtrack_count];
             }
         } else {
-            //char_ptr matches, move to next char_ptr
-            char_ptr++;
-            t_w.c = &st[++text_modifier];
+            text_modifier += 8;
+            backtrack_location += 8;
+            backtrack_count = 0;
+            char_ptr = subquery_array;
+            t_w.c = &st[text_modifier];
+            query_matches = LAST_BITS_ON;
         }
     }
-    if(text_len >= text_modifier){
-        return true;
-    } else {
-        return false;
-    }
+    return text_len >= text_modifier;
 }
