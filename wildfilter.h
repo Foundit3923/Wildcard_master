@@ -1,7 +1,5 @@
 //
-// Created by Michael Olson and Daniel Davis on 07/05/2020.
-// Moves through a string looking for a wildcard pattern
-// Experiment with overlapping text windows
+// Created by michael on 8/29/20.
 //
 
 #include <stdio.h>
@@ -13,83 +11,62 @@
 #include <time.h>
 #include <math.h>
 
-// Assumes little endian
 
-//---------//
-// GLOBALS //
-//---------//
-
-#define LAST_BITS_ON 72340172838076673     // 00000001 repeated 8 times
+#define LAST_BITS_ON 0x101010101010101UL
+#define ALL_ON 0xFFFFFFFFFFFFFFFFUL
+#define haszero(v) (((v) - 0x0101010101010101UL) & ~(v) & 0x8080808080808080UL)
 
 union Window {
     uint64_t* i;
     char* c;
 }Window;
 
-bool Experimental_wildcard_arbitrary_length_moving_union_1 (char st[],
-                                                            char* subquery_array,
-                                                            uint64_t f_m[]) {
-    //----------//
-    //Processing//
-    //----------//
+bool Experimental_wildcard_arbitrary_length_moving_union_save (char* st,
+                                                               char* query_array) {
+    int text_len = (uint64_t) strlen(st);
+    int query_len = (uint64_t) strlen(query_array);
+    int text_modifier = query_len - 1;
+    int shift_count = 0;
 
     char* char_ptr;
-    char* save;
-
-    // As text_modifier increases by 8 we move to the next section of the text
-    int text_modifier = 0;
-    int text_len = strlen(st);
+    char* last;
+    char* string_check[2];
 
     union Window t_w;
-    t_w.c = &st[text_modifier];
+    t_w.c = &st[text_len - text_modifier];
 
-    uint64_t subquery_matches = 0;
-    uint64_t encoded_term;
+    uint64_t query_matches = LAST_BITS_ON;
+    uint64_t value;
 
-    int subquery_count = 0;
+    bool check = false;
 
-    // Points to beginning of array
-    char_ptr = &subquery_array[subquery_count];
-    save = char_ptr;
+    last = &query_array[text_modifier];
 
-    while(char_ptr != '\000' && text_len >= text_modifier) {
-        if(*char_ptr == '*'){
-            char_ptr++;
-            save = char_ptr;
-            subquery_matches = 0;
-            if(!*char_ptr){
-                return true;
-            }
+    char_ptr = last;
+
+    string_check[0] = last;
+
+    text_modifier = text_len - text_modifier;
+
+    while(text_modifier >= 0) {
+        value = ~((*t_w.i) ^ (LAST_BITS_ON * (*char_ptr)));
+        if(haszero(~value)){
+            query_matches = (((value & (value >> 4)) & 0xF0F0F0F0F0F0F0FUL & ((value & (value >> 4)) & 0xF0F0F0F0F0F0F0FUL >> 2)) &
+                            (((value & (value >> 4)) & 0xF0F0F0F0F0F0F0FUL & ((value & (value >> 4)) & 0xF0F0F0F0F0F0F0FUL >> 2)) >> 1));
         }
-        encoded_term = ~(f_m[*char_ptr] ^ *t_w.i);
-        if(!subquery_matches) {
-            subquery_matches = LAST_BITS_ON;
+
+        check = query_matches > 0;
+
+        if(&*char_ptr == &query_array[0]){
+            return true;
         }
-        //Search for matches
-        int match_count;
-        for( match_count = 0; match_count < 8; match_count++){
-            subquery_matches &= encoded_term;
-            encoded_term >>= 1;
-        }
-        if (!subquery_matches) {
-            //no matches, move on
-            text_modifier += 8;
-            if(text_modifier < text_len) {
-                t_w.c = &st[text_modifier];
-                char_ptr = save;
-                subquery_matches = 0;
-            } else {
-                return false;
-            }
-        } else {
-            //char_ptr matches, move to next char_ptr
-            char_ptr++;
-            t_w.c = &st[++text_modifier];
-        }
+
+        string_check[1] = char_ptr - check;
+        char_ptr = string_check[check];
+
+        shift_count += check;
+
+        t_w.c = &st[(text_modifier -= ((8 + shift_count) * !check) + check)];
     }
-    if(text_len >= text_modifier){
-        return true;
-    } else {
-        return false;
-    }
+    return false;
 }
