@@ -10,6 +10,7 @@
 #include <inttypes.h>
 #include <time.h>
 #include <math.h>
+#include <pthread.h>
 
 
 #define LAST_BITS_ON 0x101010101010101UL
@@ -26,22 +27,24 @@ union Query {
     char* c;
 };
 
+union Query q;
+
+union Window t_w;
+
 bool Experimental_wildcard_arbitrary_length_moving_union_save (char* st,
                                                                char* query_array) {
     int text_len = (uint64_t) strlen(st);
     int query_len = (uint64_t) strlen(query_array);
     int text_modifier = query_len - 1;
-    int shift_count = 0;
 
-    //char* q.c;
     char* last;
     char* string_check[2];
 
-    union Window t_w;
-    t_w.c = &st[text_len - text_modifier];
-    
-    union Query q;
-    q.c = &query_array[text_modifier];
+
+    t_w.c = &st[text_modifier];
+
+
+    q.c = &query_array[0];
 
     uint64_t query_matches = LAST_BITS_ON;
     uint64_t value;
@@ -49,38 +52,39 @@ bool Experimental_wildcard_arbitrary_length_moving_union_save (char* st,
 
     bool check = false;
 
-    string_check[0] = &query_array[text_modifier];
+    last = &query_array[text_modifier];
+
+    string_check[0] = &query_array[0];
 
     int_check[0] = LAST_BITS_ON;
 
-    text_modifier = text_len - text_modifier;
-
-    //t_w.c = "abcaba";
-
-
-    while(text_modifier >= 0) {
+    while(text_modifier <= text_len) {
         value = ~((*t_w.i) ^ ((LAST_BITS_ON & query_matches) * (*q.c)));
-
-        check = value > 0;
-
         if(hassetbyte(value)){
-            query_matches = (((value & (value >> 4)) & 0xF0F0F0F0F0F0F0FUL & ((value & (value >> 4)) & 0xF0F0F0F0F0F0F0FUL >> 2)) &
-                            (((value & (value >> 4)) & 0xF0F0F0F0F0F0F0FUL & ((value & (value >> 4)) & 0xF0F0F0F0F0F0F0FUL >> 2)) >> 1));
+            t_w.c = &st[text_modifier + query_len-1];
+            query_matches = ~((*t_w.i) ^ ((LAST_BITS_ON & query_matches) * (*last)));
+            check = query_matches > 0;
+            if(hassetbyte(query_matches)) {
+                query_matches = value & (value >> 4) & 0xF0F0F0F0F0F0F0FUL;
+                query_matches = ((query_matches & (query_matches >> 2)) &
+                                  ((query_matches & (query_matches >> 2)) >> 1));
+            }
         }
 
-        if(&*q.c == &query_array[0]){
+        if(&*q.c == &query_array[query_len] && check) {
             return true;
         }
 
         int_check[1] = query_matches;
         query_matches = int_check[check];
 
-        string_check[1] = q.c - check;
+        string_check[1] = q.c + check;
         q.c = string_check[check];
 
-        shift_count += check;
+        text_modifier += (8 * !check) + check;
 
-        t_w.c = &st[(text_modifier -= ((8 + shift_count) * !check) + check)];
+        t_w.c = &st[text_modifier];
+
     }
     return false;
 }
