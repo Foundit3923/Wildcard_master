@@ -16,6 +16,11 @@
 #define ALL_ON 0xFFFFFFFFFFFFFFFFUL
 #define hassetbyte(v) ((~(v) - 0x0101010101010101UL) & (v) & 0x8080808080808080UL)
 
+unsigned int v; // count bits set in this (32-bit value)
+unsigned int c; // store the total here
+static const int S[] = {1, 2, 4, 8, 16}; // Magic Binary Numbers
+static const int B[] = {0x5555555555555555, 0x3333333333333333, 0x0F0F0F0F0F0F0F0F, 0x00FF00FF00FF00FF, 0x0000FFFF0000FFFF};
+
 union Window {
     uint64_t* i;
     char* c;
@@ -26,12 +31,13 @@ union Query {
     char* c;
 };
 
-bool Experimental_wildcard_arbitrary_length_moving_union_save (char* st,
+int Experimental_wildcard_arbitrary_length_moving_union_save (char* st,
                                                                char* query_array) {
     int text_len = (uint64_t) strlen(st);
     int query_len = (uint64_t) strlen(query_array);
     int text_modifier = query_len - 1;
     int shift_count = 0;
+    int result = 0;
 
     //char* q.c;
     char* last;
@@ -69,7 +75,9 @@ bool Experimental_wildcard_arbitrary_length_moving_union_save (char* st,
         }
 
         if(&*q.c == &query_array[0]){
-            return true;
+            query_matches = query_matches - ((query_matches >> 1) & 0x5555555555555555);                          // reuse input as temporary
+            query_matches = (query_matches & 0x3333333333333333) + ((query_matches >> 2) & 0x3333333333333333);   // temp
+            result += ((query_matches + (query_matches >> 4) & 0xF0F0F0FF0F0F0F) * 0x10101011010101) >> 24;       // count
         }
 
         int_check[1] = query_matches;
@@ -82,6 +90,6 @@ bool Experimental_wildcard_arbitrary_length_moving_union_save (char* st,
 
         t_w.c = &st[(text_modifier -= ((8 + shift_count) * !check) + check)];
     }
-    return false;
+    return result;
 }
 
