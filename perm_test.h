@@ -139,11 +139,11 @@ bool Experimental_wildcard_arbitrary_length_moving_union_save (char* st,
 
         printf("\nPopCount of Perm %i: %i\n", i, pop[i]);
 
-        printf("PopCount to check: %i\n", (uint8_t) ((perms[i] / 255 ) + (perms[i] & 1)));
+        printf("PopCount to check: %i\n", (uint8_t) ((perms[i] / 255 ) + ((uint64_t) perms[i])));
 
-        printBits((perms[i] / 255 ) + (perms[i] & 1));
+        printBits(((perms[i] / 255 ) + ((uint64_t) perms[i])));
 
-        if(pop[i] == (uint8_t) (perms[i] / 255 ) + (perms[i] & 1)){
+        if(pop[i] == (uint8_t) ((perms[i] / 255 ) + ((uint64_t) perms[i]))){
             printf("\nPop Match\n");
         } else {
             printf("\nPop Mismatch\n");
