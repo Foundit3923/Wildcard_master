@@ -1,0 +1,144 @@
+//
+// Created by michael on 9/12/20.
+//
+
+//#include "include/main.h"
+#include <stdio.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <stdbool.h>
+#include <string.h>
+#include <inttypes.h>
+#include <math.h>
+
+
+#define LAST_BITS_ON 0x101010101010101UL
+#define hassetbyte(v) ((~(v) - 0x0101010101010101UL) & (v) & 0x8080808080808080UL)
+
+union Window {
+    uint64_t* i;
+    unsigned char* c;
+}Window;
+
+union Query {
+    uint64_t* i;
+    unsigned char* c;
+};
+
+int search_test (unsigned char* query_array,
+            int query_len,
+            unsigned char* st,
+            int text_len) {
+
+    int text_offset = query_len - 1;
+    int mismatch_move_count = 0;
+    int result = 0;
+
+    unsigned char* char_ptr;
+    unsigned char* last;
+    unsigned char* string_check[2];
+
+    union Window t_w;
+    t_w.c = &st[text_len - 8];
+
+    uint64_t query_matches = LAST_BITS_ON;
+    uint64_t value;
+    uint64_t value1;
+    uint64_t value2;
+    uint64_t single_character_mask;
+    uint64_t int_check[2];
+    uint64_t shift_four;
+    uint64_t query_matches_mask = 0;
+
+    bool check = false;
+
+    //last = &query_array[text_offset];
+
+    char_ptr = &query_array[0];
+
+    text_offset = 0;
+
+    while(!(&*t_w.c > &st[text_len-1])) {
+        //single_character_mask is a 64 bit value. *char_ptr is a single character. this process fills
+        // single_character_mask with that character such that every byte is filled with the ASCII representation
+        // of that character.
+        single_character_mask = query_matches * (*char_ptr);
+
+        //Value is a 64 bit value. *t_w.i is a 64 bit slice of t_w.c which holds the text. Specifically *t_w.i
+        //is the first 64 bits occuring after the start location of t_w.c. This process performs an XOR comparison
+        //between *t_w.i and single_character_mask. The result will have an empty byte wherever the character that was
+        //used to fill single_character_mask appears in *t_w.i. The ~ will turn each of those empty bytes into fully
+        //set bytes.
+        value1 = (*t_w.i) ^ single_character_mask;
+        value2 = (value1 ^ single_character_mask);
+        value = ~(value2 ^ (LAST_BITS_ON *(*char_ptr)));
+        //value = ~((((*t_w.i) ^ single_character_mask) ^ single_character_mask) ^ (LAST_BITS_ON * (*char_ptr)));
+
+        //Check is a boolean value. When value is > 0 we know that a character in a position we care about is located
+        //in the text so we set it to true;
+        //check = value > 0;
+
+        //Haszero checks if the value passed contains an set byte
+
+
+        //query_matches is a 64 bit value. This process takes all the bytes and reduces them to the bytes lowest
+        // value and places that value in the lsb position. When the byte is set the lsb is a 1, if the byte has a zero the lsb is a 0.
+        //this is possible because 0xF0F0F0F0F0F0F0FUL clears the left 4 bits in every byte after the first shift.
+        //First value is shifted to the right by 4 lining up the left 4 and right 4 bits of each byte. Value and
+        //shifted value are compared via &. The left 4 bits of each byte are zeroed out. The same process minus
+        //zeroing is performed for the inner right two bits of the result and then the two lsb of that result.
+        shift_four = value & (value >> 4) & 0xF0F0F0F0F0F0F0FUL;
+        query_matches = ((shift_four & (shift_four >> 2)) &
+                         ((shift_four & (shift_four >> 2)) >> 1)) * (bool) hassetbyte(value);
+
+
+        //This is an end condition. When we reach the beginning of the query and we had a match this cycle we have found
+        //an instance of the query in the text so we return true
+        if(&char_ptr[0] == &query_array[query_len-1]){
+            if((bool) query_matches){
+                result += __builtin_popcountll(query_matches);
+                query_matches = 0;
+                //query_matches_mask = 72057594037927936;
+                text_offset -= mismatch_move_count;
+                mismatch_move_count = 0;
+            }
+        }
+
+        //This section allows us to pick between two variable assignments based on the value of check. In this case we
+        //are setting char_ptr to the last char in the query if check has a False value, and Decrements it if it has a
+        //True value
+        string_check[0] = &query_array[0];
+        string_check[1] = char_ptr + 1;
+        char_ptr = string_check[(bool) query_matches];
+
+        mismatch_move_count += (bool) query_matches;
+
+        //This section decrements text_offset by one of two values based on the value of check. If check is True it
+        //decrements by 1. If check is False, it subtracts mismatch_move_count from 8 and decrements text_offset by
+        //the result.
+        text_offset += ((8 - mismatch_move_count) * !((bool) query_matches)) + (bool) query_matches;
+
+        //This section is updating the location of the left size of the text window.
+        t_w.c = &st[text_offset];
+
+        //mismatch_move_count is an integer. It is used to count the number of characters we have to check agaisnt the
+        //last char in the query if we encounter a mismatch
+        mismatch_move_count = mismatch_move_count * (bool) query_matches;
+
+
+        //This section allows us to pick between two variable assignments based on the value of check. In this case we
+        //are setting query_matches to LAST_BITS_ON if check has a False value, and itself if check has a True value
+        int_check[0] = LAST_BITS_ON;
+        int_check[1] = query_matches;
+        query_matches = int_check[(bool) query_matches];
+
+        //query_matches_mask = 72057594037927936 * !((bool) query_matches - 0);
+
+    }
+
+    //We return False if the text is searched and nothing is found.
+    return result;
+
+}
+
+
